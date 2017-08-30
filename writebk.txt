@@ -1,50 +1,52 @@
-sites
+## JSS-Config-In-A-Box category sync chooser - read from source
+## COMMENT OUT LINES THAT YOU DO NOT WISH TO SYNC TO DESTINATION INSTANCES
+# sites
 categories
 ldapservers
-accounts
-buildings
-departments
+# accounts
+# buildings
+# departments
 directorybindings
-removablemacaddresses
-netbootservers
+# removablemacaddresses
+# netbootservers
 distributionpoints
 softwareupdateservers
-networksegments
-healthcarelistener
-ibeacons
-infrastructuremanager
-peripherals
-peripheraltypes
+# networksegments
+# healthcarelistener
+# ibeacons
+# infrastructuremanager
+# peripherals
+# peripheraltypes
 smtpserver
-vppaccounts
-vppassignments
-vppinvitations
-webhooks
+# vppaccounts
+# vppassignments
+# vppinvitations
+# webhooks
 diskencryptionconfigurations
-ebooks
+# ebooks
 computerextensionattributes
-dockitems
-printers
-licensedsoftware
+# dockitems
+# printers
+# licensedsoftware
 scripts
 computergroups
 restrictedsoftware
 osxconfigurationprofiles
-macapplications
-managedpreferenceprofiles
+# macapplications
+# managedpreferenceprofiles
 packages
 policies
 advancedcomputersearches
 patches
-mobiledeviceextensionattributes
-mobiledeviceapplications
-mobiledeviceconfigurationprofiles
-mobiledeviceenrollmentprofiles
-mobiledevicegroups
-mobiledeviceprovisioningprofiles
-classes
-advancedmobiledevicesearches
-userextensionattributes
-usergroups
-users
-advancedusersearches
+# mobiledeviceextensionattributes
+# mobiledeviceapplications
+# mobiledeviceconfigurationprofiles
+# mobiledeviceenrollmentprofiles
+# mobiledevicegroups
+# mobiledeviceprovisioningprofiles
+# classes
+# advancedmobiledevicesearches
+# userextensionattributes
+# usergroups
+# users
+# advancedusersearches

@@ -28,6 +28,14 @@ export resultInt=1
 export currentver="1.8"
 export currentverdate="30th August 2017"
 
+export xmlloc_default="$HOME/Desktop/JSS_Config"
+export origjssaddress_default="https://id-jamf-tst.ethz.ch"
+export destjssaddress_default="https://id-jamf-tst.ethz.ch"
+export origjssapiuser_default="JSS_config_download"
+export destjssapiuser_default="JSS_config_write"
+export origjssinstance_default="source"
+export destjssinstance_default="dest01"
+
 # These are the categories we're going to save or wipe
 rwi=0
 declare -a readwipe
@@ -60,7 +68,7 @@ doesxmlfolderexist()
 	# Check for the skip
 	if [[ $path = "" ]];
 	then
-		export xmlloc="$HOME/Desktop/JSS_Config"
+		export xmlloc="$xmlloc_default"
 	fi
 
 	# Check and create the JSS xml folder and archive folders if missing.
@@ -434,44 +442,68 @@ MainMenu()
 		case "$choice" in
 			1)
 				echo -e "\n"
-				read -p "Enter the originating JSS server address (https://www.example.com:8443) : " jssaddress
-				read -p "Enter the originating JSS server api username : " jssapiuser
+				read -p "Enter the originating JSS server address (or enter for $origjssaddress_default) : " jssaddress
+				read -p "Enter the originating JSS server api username (or enter for $origjssapiuser_default) : " jssapiuser
 				read -p "Enter the originating JSS api user password : " -s jssapipwd
+
+				# Read in defaults if not entered
+				if [[ -z $jssaddress ]]; then
+					jssaddress="$origjssaddress_default"
+				fi
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="$origjssapiuser_default"
+				fi
+
 				export origjssaddress=$jssaddress
 				export origjssapiuser=$jssapiuser
 				export origjssapipwd=$jssapipwd
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				echo "Enter the originating JSS instance name to download"
-				read -p "(Or enter for a non-context JSS) : " jssinstance
+				echo "Enter the originating JSS instance name from which to download API data (or enter for '$origjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
 
-				# Check for the skip
-				if [[ $jssinstance != "" ]];
-				then
-					jssinstance="/$instance/"
+				# Check for the default or non-context
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance="/"
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="/$origjssinstance_default/"
+				else
+					jssinstance="/$jssinstance/"
 				fi
 
 				grabexistingjssxml
 			;;
 			2)
 				echo -e "\n"
-				read -p "Enter the destination JSS server address (https://example.jamfcloud.com:443) : " jssaddress
-				read -p "Enter the destination JSS server api username : " jssapiuser
+				read -p "Enter the destination JSS server address (or enter for $destjssaddress_default) : " jssaddress
+				read -p "Enter the destination JSS server api username (or enter for $destjssapiuser_default) : " jssapiuser
 				read -p "Enter the destination JSS api user password : " -s jssapipwd
+
+				# Read in defaults if not entered
+				if [[ -z $jssaddress ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="$destjssapiuser_default"
+				fi
+
 				export destjssaddress=$jssaddress
 				export destjssapiuser=$jssapiuser
 				export destjssapipwd=$jssapipwd
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				echo "Enter the destination JSS instance name to upload"
+				echo "Enter the destination JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
 				read -p "(Or enter for a non-context JSS) : " jssinstance
 
-				# Check for the skip
-				if [[ $jssinstance != "" ]];
-				then
-					jssinstance="/$instance/"
+				# Check for the default or non-context
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance="/"
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="/$destjssinstance_default/"
+				else
+					jssinstance="/$jssinstance/"
 				fi
 
 				wipejss
