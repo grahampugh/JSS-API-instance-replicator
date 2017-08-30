@@ -29,110 +29,26 @@ export currentver="1.8"
 export currentverdate="30th August 2017"
 
 # These are the categories we're going to save or wipe
+rwi=0
 declare -a readwipe
-readwipe[0]="sites"							# Backend configuration
-readwipe[1]="categories"
-readwipe[2]="ldapservers"
-readwipe[3]="accounts"
-readwipe[4]="buildings"
-readwipe[5]="departments"
-readwipe[6]="directorybindings"
-readwipe[7]="removablemacaddresses"
-readwipe[8]="netbootservers"
-readwipe[9]="distributionpoints"
-readwipe[10]="softwareupdateservers"
-readwipe[11]="networksegments"
-readwipe[12]="healthcarelistener"
-readwipe[13]="ibeacons"
-readwipe[14]="infrastructuremanager"
-readwipe[15]="peripherals"
-readwipe[16]="peripheraltypes"
-readwipe[17]="smtpserver"
-readwipe[18]="vppaccounts"
-readwipe[19]="vppassignments"
-readwipe[20]="vppinvitations"
-readwipe[21]="webhooks"
-readwipe[22]="diskencryptionconfigurations"
-readwipe[23]="ebooks"
-readwipe[24]="computergroups" 				# Computer configuration
-readwipe[25]="dockitems"
-readwipe[26]="printers"
-readwipe[27]="licensedsoftware"
-readwipe[28]="scripts"
-readwipe[29]="computerextensionattributes"
-readwipe[30]="restrictedsoftware"
-readwipe[31]="osxconfigurationprofiles"
-readwipe[32]="macapplications"
-readwipe[33]="managedpreferenceprofiles"
-readwipe[34]="packages"
-readwipe[35]="policies"
-readwipe[36]="advancedcomputersearches"
-readwipe[37]="patches"
-readwipe[38]="mobiledevicegroups"			# Mobile configuration
-readwipe[39]="mobiledeviceapplications"
-readwipe[40]="mobiledeviceconfigurationprofiles"
-readwipe[41]="mobiledeviceenrollmentprofiles"
-readwipe[42]="mobiledeviceextensionattributes"
-readwipe[43]="mobiledeviceprovisioningprofiles"
-readwipe[44]="classes"
-readwipe[45]="advancedmobiledevicesearches"
-readwipe[46]="userextensionattributes"		# User configuration
-readwipe[47]="usergroups"
-readwipe[48]="users"
-readwipe[49]="advancedusersearches"
+readwipefile="./readwipe.txt"
+while read -r line; do
+	if [[ ${line:0:1} != '#' && $line ]]; then
+		readwipe[$rwi]="$line"
+		rwi=$((rwi+1))
+	fi
+done < $readwipefile
 
 # These are the categories we're going to upload. Ordering is different from read/wipe.
+wbi=0
 declare -a writebk
-writebk[0]="sites"							# Backend configuration
-writebk[1]="categories"
-writebk[2]="ldapservers"
-writebk[3]="accounts"
-writebk[4]="buildings"
-writebk[5]="departments"
-writebk[6]="directorybindings"
-writebk[7]="removablemacaddresses"
-writebk[8]="netbootservers"
-writebk[9]="distributionpoints"
-writebk[10]="softwareupdateservers"
-writebk[11]="networksegments"
-writebk[12]="healthcarelistener"
-writebk[13]="ibeacons"
-writebk[14]="infrastructuremanager"
-writebk[15]="peripherals"
-writebk[16]="peripheraltypes"
-writebk[17]="smtpserver"
-writebk[18]="vppaccounts"
-writebk[19]="vppassignments"
-writebk[20]="vppinvitations"
-writebk[21]="webhooks"
-writebk[22]="diskencryptionconfigurations"
-writebk[23]="ebooks"
-writebk[24]="computerextensionattributes" 		# Computer configuration
-writebk[25]="dockitems"
-writebk[26]="printers"
-writebk[27]="licensedsoftware"
-writebk[28]="scripts"
-writebk[29]="computergroups"
-writebk[30]="restrictedsoftware"
-writebk[31]="osxconfigurationprofiles"
-writebk[32]="macapplications"
-writebk[33]="managedpreferenceprofiles"
-writebk[34]="packages"
-writebk[35]="policies"
-writebk[36]="advancedcomputersearches"
-writebk[37]="patches"
-writebk[38]="mobiledeviceextensionattributes"		# Mobile configuration
-writebk[39]="mobiledeviceapplications"
-writebk[40]="mobiledeviceconfigurationprofiles"
-writebk[41]="mobiledeviceenrollmentprofiles"
-writebk[42]="mobiledevicegroups"
-writebk[43]="mobiledeviceprovisioningprofiles"
-writebk[44]="classes"
-writebk[45]="advancedmobiledevicesearches"
-writebk[46]="userextensionattributes"				# User configuration
-writebk[47]="usergroups"
-writebk[48]="users"
-writebk[49]="advancedusersearches"
+writebkfile="./writebk.txt"
+while read -r line; do
+	if [[ ${line:0:1} != '#' && $line ]]; then
+		readwipe[$wbi]="$line"
+		rwi=$((wbi+1))
+	fi
+done < $writebkfile
 
 # Start functions here
 doesxmlfolderexist()
@@ -162,7 +78,7 @@ doesxmlfolderexist()
 			archive="NO"
 		fi
 	fi
-	
+
 	# Check for existing items, archiving if necessary.
 	for (( loop=0; loop<${#readwipe[@]}; loop++ ))
 	do
@@ -189,13 +105,13 @@ doesxmlfolderexist()
 
 grabexistingjssxml()
 {
-	# Setting IFS Env to only use new lines as field seperator 
+	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
 
 	# Loop around the array of JSS categories we set up earlier.
 	for (( loop=0; loop<${#readwipe[@]}; loop++ ))
-	do	
+	do
 		# Set our result incremental variable to 1
 		export resultInt=1
 
@@ -206,8 +122,8 @@ grabexistingjssxml()
 		export plainListAccountsGroups=$xmlloc/${readwipe[$loop]}/id_list/plainListAccountsGroups
 		export fetchedResult=$xmlloc/${readwipe[$loop]}/fetched_xml/result"$resultInt".xml
 		export fetchedResultAccountsUsers=$xmlloc/${readwipe[$loop]}/fetched_xml/userResult"$resultInt".xml
-		export fetchedResultAccountsGroups=$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult"$resultInt".xml	
-	
+		export fetchedResultAccountsGroups=$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult"$resultInt".xml
+
 		# Grab all existing ID's for the current category we're processing
 		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on template JSS \n"
 		curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd" | xmllint --format - > $formattedList
@@ -254,7 +170,7 @@ grabexistingjssxml()
 						cleanedName=$( echo "$itemName" | sed 's/[:\/\\]//g' )
 						fileName="$cleanedName [ID $itemID]"
 						echo "$fetchedResultAccountsUsers" > $xmlloc/${readwipe[$loop]}/fetched_xml/user_"$resultInt.xml"
-					
+
 						let "resultInt = $resultInt + 1"
 					done
 
@@ -270,11 +186,11 @@ grabexistingjssxml()
 						cleanedName=$( echo "$itemName" | sed 's/[:\/\\]//g' )
 						fileName="$cleanedName [ID $itemID]"
 						echo "$fetchedResultAccountsGroups" > $xmlloc/${readwipe[$loop]}/fetched_xml/group_"$resultInt.xml"
-					
+
 						let "resultInt = $resultInt + 1"
-					done			
+					done
 				;;
-			
+
 				*)
 					totalFetchedIDs=`cat "$plainList" | wc -l | sed -e 's/^[ \t]*//'`
 
@@ -284,12 +200,12 @@ grabexistingjssxml()
 						curl -s -k --user "$origjssapiuser:$origjssapipwd" -H "Content-Type: application/xml" -X GET "$origjssaddress/JSSResource/${readwipe[$loop]}/id/$apiID" | xmllint --format - > $fetchedResult
 						resultInt=$(($resultInt + 1))
 						fetchedResult=$xmlloc/${readwipe[$loop]}/fetched_xml/result"$resultInt".xml
-					done	
+					done
 				;;
 			esac
-			
+
 			# Depending which category we're dealing with, parse the grabbed files into something we can upload later.
-			case "${readwipe[$loop]}" in	
+			case "${readwipe[$loop]}" in
 				computergroups)
 					echo -e "\nParsing JSS computer groups"
 
@@ -304,7 +220,7 @@ grabexistingjssxml()
 						else
 							echo "$resourceXML is a smart computer group..."
 							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/smart_group_parsed_"$resourceXML"
-						fi					
+						fi
 					done
 				;;
 
@@ -314,7 +230,7 @@ grabexistingjssxml()
 					for resourceXML in $(ls $xmlloc/${readwipe[$loop]}/fetched_xml)
 					do
 						echo "Parsing policy: $resourceXML"
-			
+
 						if [[ `cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<name>No category assigned</name>"` ]]
 						then
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
@@ -339,17 +255,17 @@ grabexistingjssxml()
 			echo -e "\nResource ${readwipe[$loop]} empty. Skipping."
 		fi
 	done
-	
-	# Setting IFS back to default 
+
+	# Setting IFS back to default
 	IFS=$OIFS
 }
 
 wipejss()
 {
-	# Setting IFS Env to only use new lines as field seperator 
+	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
-	
+
 	# THIS IS YOUR LAST CHANCE TO PUSH THE CANCELLATION BUTTON
 
 	echo -e "\nThis action will erase the destination JSS before upload."
@@ -385,7 +301,7 @@ wipejss()
 			then
 				# What are we deleting?
 				echo -e "\nDeleting ${readwipe[$loop]}"
-	
+
 				# Process all the item id numbers
 				cat /tmp/unprocessedid | awk -F'<id>|</id>' '/<id>/ {print $2}' > /tmp/processedid
 
@@ -397,21 +313,21 @@ wipejss()
 					echo "Deleting ID number $apiID ( $resultInt out of $totalFetchedIDs )"
 					curl -s -k --user "$jssapiuser:$jssapipwd" -H "Content-Type: application/xml" -X DELETE "$jssaddress$jssinstance/JSSResource/${readwipe[$loop]}/id/$apiID"
 					resultInt=$(($resultInt + 1))
-				done	
+				done
 			else
 				echo -e "\nCategory ${readwipe[$loop]} is empty. Skipping."
 			fi
 		fi
 	done
-	
-	# Setting IFS back to default 
+
+	# Setting IFS back to default
 	IFS=$OIFS
 
 }
 
 puttonewjss()
 {
-	# Setting IFS Env to only use new lines as field seperator 
+	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
 
@@ -423,13 +339,13 @@ puttonewjss()
 			export resultInt=1
 
 			echo -e "\n\nPosting ${writebk[$loop]} to new JSS instance: $destjssaddress$jssinstance"
-		
+
 			case "${writebk[$loop]}" in
 				accounts)
 					echo -e "\nPosting user accounts."
 
 					totalParsedResourceXML_user=$( ls $xmlloc/${writebk[$loop]}/parsed_xml/*user* | wc -l | sed -e 's/^[ \t]*//' )
-					postInt_user=0	
+					postInt_user=0
 
 					for xmlPost_user in $(ls -1 $xmlloc/${writebk[$loop]}/parsed_xml/*user*)
 					do
@@ -441,7 +357,7 @@ puttonewjss()
 					echo -e "\nPosting user group accounts."
 
 					totalParsedResourceXML_group=$( ls $xmlloc/${writebk[$loop]}/parsed_xml/*group* | wc -l | sed -e 's/^[ \t]*//' )
-					postInt_group=0	
+					postInt_group=0
 
 					for xmlPost_group in $(ls -1 $xmlloc/${writebk[$loop]}/parsed_xml/*group*)
 					do
@@ -449,8 +365,8 @@ puttonewjss()
 						echo -e "\nPosting $xmlPost_group ( $postInt_group out of $totalParsedResourceXML_group )"
 						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$xmlPost_group" "$destjssaddress$jssinstance/JSSResource/accounts/groupid/0" -u "$destjssapiuser:$destjssapipwd"
 					done
-				;;	
-				
+				;;
+
 				computergroups)
 					echo -e "\nPosting static computer groups."
 
@@ -467,7 +383,7 @@ puttonewjss()
 					echo -e "\nPosting smart computer groups"
 
 					totalParsedResourceXML_smartGroups=$(ls $xmlloc/${writebk[$loop]}/parsed_xml/smart_group_parsed* | wc -l | sed -e 's/^[ \t]*//')
-					postInt_smart=0	
+					postInt_smart=0
 
 					for parsedXML_smart in $(ls -1 $xmlloc/${writebk[$loop]}/parsed_xml/smart_group_parsed*)
 					do
@@ -476,10 +392,10 @@ puttonewjss()
 						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$parsedXML_smart" "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0" -u "$destjssapiuser:$destjssapipwd"
 					done
 				;;
-		
+
 				*)
 					totalParsedResourceXML=$(ls $xmlloc/${writebk[$loop]}/parsed_xml | wc -l | sed -e 's/^[ \t]*//')
-					postInt=0	
+					postInt=0
 
 					for parsedXML in $(ls $xmlloc/${writebk[$loop]}/parsed_xml)
 					do
@@ -488,13 +404,13 @@ puttonewjss()
 						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0" -u "$destjssapiuser:$destjssapipwd"
 					done
 				;;
-			esac		
+			esac
 		else
 			echo -e "\nResource ${writebk[$loop]} empty. Skipping."
 		fi
 	done
 
-	# Setting IFS back to default 
+	# Setting IFS back to default
 	IFS=$OIFS
 }
 
@@ -527,7 +443,7 @@ MainMenu()
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				echo "Enter the destination JSS instance name to download"
+				echo "Enter the originating JSS instance name to download"
 				read -p "(Or enter for a non-context JSS) : " jssinstance
 
 				# Check for the skip
@@ -559,18 +475,18 @@ MainMenu()
 				fi
 
 				wipejss
-				puttonewjss				
+				puttonewjss
 			;;
 			q)
 				echo -e "\nThank you for using JSS Config in a Box!"
 			;;
 			*)
-				echo -e "\nIncorrect input. Please try again." 
+				echo -e "\nIncorrect input. Please try again."
 			;;
 		esac
 	done
 
-	# Setting IFS back to default 
+	# Setting IFS back to default
 	IFS=$OIFS
 }
 
