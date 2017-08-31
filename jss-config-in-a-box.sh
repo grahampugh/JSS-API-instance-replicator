@@ -25,16 +25,22 @@
 
 # Set up variables here
 export resultInt=1
-export currentver="1.8"
+export currentver="Forked from 1.8 by GP"
 export currentverdate="30th August 2017"
 
 export xmlloc_default="$HOME/Desktop/JSS_Config"
-export origjssaddress_default="https://id-jamf-tst.ethz.ch"
-export destjssaddress_default="https://id-jamf-tst.ethz.ch"
+export origjssaddress_default="https://myserver"
+export destjssaddress_default="https://myotherserver"
 export origjssapiuser_default="JSS_config_download"
 export destjssapiuser_default="JSS_config_write"
 export origjssinstance_default="source"
 export destjssinstance_default="dest01"
+
+# If you wish to store your confidential config in a separate file, specify it here to overwrite the above values:
+configFile="./jciab-conf.sh"
+if [[ -f "$configFile" ]]; then
+	. "$configFile"
+fi
 
 # These are the categories we're going to save or wipe
 rwi=0
@@ -53,8 +59,8 @@ declare -a writebk
 writebkfile="./writebk.txt"
 while read -r line; do
 	if [[ ${line:0:1} != '#' && $line ]]; then
-		readwipe[$wbi]="$line"
-		rwi=$((wbi+1))
+		writebk[$wbi]="$line"
+		wbi=$((wbi+1))
 	fi
 done < $writebkfile
 
@@ -92,7 +98,7 @@ doesxmlfolderexist()
 	do
 		if [ "$archive" = "YES" ];
 		then
-			if [ `ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l` -gt 0 ];
+			if [ $(ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l) -gt 0 ];
 			then
 				echo "Archiving category: "${readwipe[$loop]}
 				ditto -ck "$xmlloc"/"${readwipe[$loop]}" "$xmlloc"/archives/"${readwipe[$loop]}"-$( date +%Y%m%d%H%M%S ).zip
@@ -134,11 +140,12 @@ grabexistingjssxml()
 
 		# Grab all existing ID's for the current category we're processing
 		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on template JSS \n"
+		# echo -e "using $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} with user $origjssapiuser:$origjssapipwd"
 		curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd" | xmllint --format - > $formattedList
 
 		if [ ${readwipe[$loop]} = "accounts" ];
 		then
-			if [ `cat "$formattedList" | grep "<users/>" | wc -l | awk '{ print $1 }'` = "0" ];
+			if [ $(cat "$formattedList" | grep "<users/>" | wc -l | awk '{ print $1 }') = "0" ];
 			then
 				echo "Creating plain list of user ID's..."
 				cat $formattedList | sed '/<site>/,/<\/site>/d' | sed '/<groups>/,/<\/groups>/d' | awk -F '<id>|</id>' '/<id>/ {print $2}' > $plainListAccountsUsers
@@ -146,7 +153,7 @@ grabexistingjssxml()
 				rm $formattedList
 			fi
 
-			if  [ `cat "$formattedList" | grep "<groups/>" | wc -l | awk '{ print $1 }'` = "0" ];
+			if  [ $(cat "$formattedList" | grep "<groups/>" | wc -l | awk '{ print $1 }') = "0" ];
 			then
 				echo "Creating plain list of group ID's..."
 				cat $formattedList | sed '/<site>/,/<\/site>/d'| sed '/<users>/,/<\/users>/d' | awk -F '<id>|</id>' '/<id>/ {print $2}' > $plainListAccountsGroups
@@ -154,7 +161,7 @@ grabexistingjssxml()
 				rm $formattedList
 			fi
 		else
-			if [ `cat "$formattedList" | grep "<size>0" | wc -l | awk '{ print $1 }'` = "0" ];
+			if [ $(cat "$formattedList" | grep "<size>0" | wc -l | awk '{ print $1 }') = "0" ];
 			then
 				echo -e "\n\nCreating a plain list of ${readwipe[$loop]} ID's \n"
 				cat $formattedList |awk -F'<id>|</id>' '/<id>/ {print $2}' > $plainList
@@ -164,7 +171,7 @@ grabexistingjssxml()
 		fi
 
 		# Work out how many ID's are present IF formattedlist is present. Grab and download each one for the specific search we're doing. Special code for accounts because the API is annoyingly different from the rest.
-		if [ `ls -1 "$xmlloc/${readwipe[$loop]}/id_list"/* 2>/dev/null | wc -l` -gt 0 ];
+		if [ $(ls -1 "$xmlloc/${readwipe[$loop]}/id_list"/* 2>/dev/null | wc -l) -gt 0 ];
 		then
 			case "${readwipe[$loop]}" in
 				accounts)
@@ -172,14 +179,14 @@ grabexistingjssxml()
 					for userID in $( cat $plainListAccountsUsers )
 					do
 						echo "Downloading User ID number $userID ( $resultInt out of $totalFetchedIDsUsers )"
-						fetchedResultAccountsUsers=$( curl --silent -k --user "$origjssapiuser:$origjssapipwd" -H "Content-Type: application/xml" -X GET "$origjssaddress/JSSResource/${readwipe[$loop]}/userid/$userID" | xmllint --format - )
+						fetchedResultAccountsUsers=$( curl -s -k $origjssaddress/JSSResource/${readwipe[$loop]}/userid/$userID -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd"  | xmllint --format - )
 						itemID=$( echo "$fetchedResultAccountsUsers" | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }')
 						itemName=$( echo "$fetchedResultAccountsUsers" | grep "<name>" | awk -F '<name>|</name>' '{ print $2; exit; }')
 						cleanedName=$( echo "$itemName" | sed 's/[:\/\\]//g' )
 						fileName="$cleanedName [ID $itemID]"
 						echo "$fetchedResultAccountsUsers" > $xmlloc/${readwipe[$loop]}/fetched_xml/user_"$resultInt.xml"
 
-						let "resultInt = $resultInt + 1"
+						resultInt=$((resultInt + 1))
 					done
 
 					resultInt=1
@@ -188,25 +195,27 @@ grabexistingjssxml()
 					for groupID in $( cat $plainListAccountsGroups )
 					do
 						echo "Downloading Group ID number $groupID ( $resultInt out of $totalFetchedIDsGroups )"
-						fetchedResultAccountsGroups=$( curl --silent -k --user "$origjssapiuser:$origjssapipwd" -H "Content-Type: application/xml" -X GET "$origjssaddress/JSSResource/${readwipe[$loop]}/groupid/$groupID" | xmllint --format - )
+						fetchedResultAccountsGroups=$( curl -s -k $origjssaddress/JSSResource/${readwipe[$loop]}/groupid/$groupID -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd"  | xmllint --format - )
 						itemID=$( echo "$fetchedResultAccountsGroups" | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }')
 						itemName=$( echo "$fetchedResultAccountsGroups" | grep "<name>" | awk -F '<name>|</name>' '{ print $2; exit; }')
 						cleanedName=$( echo "$itemName" | sed 's/[:\/\\]//g' )
 						fileName="$cleanedName [ID $itemID]"
 						echo "$fetchedResultAccountsGroups" > $xmlloc/${readwipe[$loop]}/fetched_xml/group_"$resultInt.xml"
 
-						let "resultInt = $resultInt + 1"
+						resultInt=$((resultInt + 1))
 					done
 				;;
 
 				*)
-					totalFetchedIDs=`cat "$plainList" | wc -l | sed -e 's/^[ \t]*//'`
+					totalFetchedIDs=$(cat "$plainList" | wc -l | sed -e 's/^[ \t]*//')
 
 					for apiID in $(cat $plainList)
 					do
 						echo "Downloading ID number $apiID ( $resultInt out of $totalFetchedIDs )"
-						curl -s -k --user "$origjssapiuser:$origjssapipwd" -H "Content-Type: application/xml" -X GET "$origjssaddress/JSSResource/${readwipe[$loop]}/id/$apiID" | xmllint --format - > $fetchedResult
-						resultInt=$(($resultInt + 1))
+
+						curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]}/id/$apiID -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd" | xmllint --format - > $fetchedResult
+
+						resultInt=$((resultInt + 1))
 						fetchedResult=$xmlloc/${readwipe[$loop]}/fetched_xml/result"$resultInt".xml
 					done
 				;;
@@ -221,7 +230,7 @@ grabexistingjssxml()
 					do
 						echo "Parsing computer group: $resourceXML"
 
-						if [[ `cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<is_smart>false</is_smart>"` ]]
+						if [[ $(cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<is_smart>false</is_smart>") ]]
 						then
 							echo "$resourceXML is a static computer group"
 							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/static_group_parsed_"$resourceXML"
@@ -239,7 +248,7 @@ grabexistingjssxml()
 					do
 						echo "Parsing policy: $resourceXML"
 
-						if [[ `cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<name>No category assigned</name>"` ]]
+						if [[ $(cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<name>No category assigned</name>") ]]
 						then
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
 						else
@@ -300,7 +309,8 @@ wipejss()
 
 			# Grab all existing ID's for the current category we're processing
 			echo -e "\n\nProcessing ID list for ${readwipe[$loop]}\n"
-			curl -s -k --user "$jssapiuser:$jssapipwd" -H "Accept: application/xml" $jssaddress$jssinstance/JSSResource/${readwipe[$loop]} | xmllint --format - > /tmp/unprocessedid
+
+			curl -s -k $destjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - > /tmp/unprocessedid
 
 			# Check if any ids have been captured. Skip if none present.
 			check=$( echo /tmp/unprocessedid | grep "<size>0</size>" | wc -l | awk '{ print $1 }' )
@@ -319,8 +329,10 @@ wipejss()
 				for apiID in $(cat /tmp/processedid)
 				do
 					echo "Deleting ID number $apiID ( $resultInt out of $totalFetchedIDs )"
-					curl -s -k --user "$jssapiuser:$jssapipwd" -H "Content-Type: application/xml" -X DELETE "$jssaddress$jssinstance/JSSResource/${readwipe[$loop]}/id/$apiID"
-					resultInt=$(($resultInt + 1))
+					curl -k $destjssaddress$jssinstance/JSSResource/${readwipe[$loop]}/id/$apiID -H "Accept: application/xml" --request DELETE --user "$destjssapiuser:$destjssapipwd"
+
+					# curl -s -k --user "$jssapiuser:$jssapipwd" -H "Accept: application/xml" -X DELETE "$jssaddress$jssinstance/JSSResource/${readwipe[$loop]}/id/$apiID"
+					resultInt=$((resultInt + 1))
 				done
 			else
 				echo -e "\nCategory ${readwipe[$loop]} is empty. Skipping."
@@ -339,9 +351,11 @@ puttonewjss()
 	OIFS=$IFS
 	IFS=$'\n'
 
+	echo -e "Writing to $jssinstance"
+
 	for (( loop=0; loop<${#writebk[@]}; loop++ ))
 	do
-		if [ `ls -1 "$xmlloc"/"${writebk[$loop]}"/parsed_xml/* 2>/dev/null | wc -l` -gt 0 ];
+		if [ $(ls -1 "$xmlloc"/"${writebk[$loop]}"/parsed_xml/* 2>/dev/null | wc -l) -gt 0 ];
 		then
 			# Set our result incremental variable to 1
 			export resultInt=1
@@ -359,7 +373,9 @@ puttonewjss()
 					do
 						let "postInt_user = $postInt_user + 1"
 						echo -e "\nPosting $xmlPost_user ( $postInt_user out of $totalParsedResourceXML_user )"
-						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$xmlPost_user" "$destjssaddress$jssinstance/JSSResource/accounts/userid/0" -u "$destjssapiuser:$destjssapipwd"
+
+						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlPost_user" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/userid/0
+
 					done
 
 					echo -e "\nPosting user group accounts."
@@ -371,7 +387,9 @@ puttonewjss()
 					do
 						let "postInt_group = $postInt_group + 1"
 						echo -e "\nPosting $xmlPost_group ( $postInt_group out of $totalParsedResourceXML_group )"
-						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$xmlPost_group" "$destjssaddress$jssinstance/JSSResource/accounts/groupid/0" -u "$destjssapiuser:$destjssapipwd"
+
+						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlPost_group" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/groupid/0
+
 					done
 				;;
 
@@ -385,7 +403,9 @@ puttonewjss()
 					do
 						let "postInt_static = $postInt_static + 1"
 						echo -e "\nPosting $parsedXML_static ( $postInt_static out of $totalParsedResourceXML_staticGroups )"
-						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$parsedXML_static" "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0" -u "$destjssapiuser:$destjssapipwd"
+
+						curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+
 					done
 
 					echo -e "\nPosting smart computer groups"
@@ -397,7 +417,9 @@ puttonewjss()
 					do
 						let "postInt_smart = $postInt_smart + 1"
 						echo -e "\nPosting $parsedXML_smart ( $postInt_smart out of $totalParsedResourceXML_smartGroups )"
-						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$parsedXML_smart" "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0" -u "$destjssapiuser:$destjssapipwd"
+
+						curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+
 					done
 				;;
 
@@ -409,7 +431,13 @@ puttonewjss()
 					do
 						let "postInt = $postInt + 1"
 						echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
-						curl -k -H "Content-Type: application/xml" -X POST --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0" -u "$destjssapiuser:$destjssapipwd"
+
+						echo -e <<END
+						curl -sS -k -i -H "Content-Type: application/xml" --form file=@"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+END
+
+						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+
 					done
 				;;
 			esac
@@ -465,11 +493,11 @@ MainMenu()
 
 				# Check for the default or non-context
 				if [[ $jssinstance == "/" ]]; then
-					jssinstance="/"
+					jssinstance=""
 				elif [[ -z $jssinstance ]]; then
-					jssinstance="/$origjssinstance_default/"
+					jssinstance="/$origjssinstance_default"
 				else
-					jssinstance="/$jssinstance/"
+					jssinstance="/$jssinstance"
 				fi
 
 				grabexistingjssxml
@@ -495,15 +523,15 @@ MainMenu()
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
 				echo "Enter the destination JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
-				read -p "(Or enter for a non-context JSS) : " jssinstance
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
 
 				# Check for the default or non-context
 				if [[ $jssinstance == "/" ]]; then
-					jssinstance="/"
+					jssinstance=""
 				elif [[ -z $jssinstance ]]; then
-					jssinstance="/$destjssinstance_default/"
+					jssinstance="/$destjssinstance_default"
 				else
-					jssinstance="/$jssinstance/"
+					jssinstance="/$jssinstance"
 				fi
 
 				wipejss
