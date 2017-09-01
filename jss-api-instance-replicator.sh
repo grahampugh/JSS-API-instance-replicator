@@ -1,33 +1,21 @@
 #!/bin/bash
 
 # Script to either save JSS config via api to XML or upload that XML to a new JSS
-
+#
+# Original Author : richard@richard-purves.com
+#
 # Loosely based on the work by Jeffrey Compton at
 # https://github.com/igeekjsc/JSSAPIScripts/blob/master/jssMigrationUtility.bash
-# His hard work is acknowledged and gratefully used. (and abused).
+#
+# Adapted by Graham Pugh
 
-# Author : richard@richard-purves.com
-# v0.1 : 10-05-2017 - Initial Version
-# v0.2 : 15-05-2017 - Download works. Misses out empty items. Upload still fails hard.
-# v0.3 : 16-05-2017 - Upload code in test. Improvements to UI. Code simplification.
-# v0.4 : 16-05-2017 - Skips empty JSS categories on download. Properly archives existing download. Choice of storage location for xml files.
-# v0.5 : 17-05-2017 - Debugged condition that "for some reason" tried to delete my entire machine. Nearly succeeded too.
-#					- Skips empty categories now for a significant speed improvement. Upload mostly works at this point.
-# v0.6 : 17-05-2017 - Check for existing xml. Creates folders if missing, archives existing files if required. Upload fails on a few things.
-# v0.7 : 17-05-2017 - Edging closer towards release candidate status. API code seems happier. App layout work required next.
-# v0.8 : 18-05-2017 - Mostly working. Fails on duplicate account name(s) (expected). Will upload App Store apps, but error if VPP isn't working (expected). Fails on policies that create accounts (huh?).
-# v1.0 : 24-05-2017 - Upload/Download working. Archival of old data wasn't working.
-# v1.1 : 24-05-2017 - Added multi context support for both originating and destination JSS' (blame MacMule .. it's always his fault!)
-# v1.5 : 21-07-2017 - Fixed versioning dates. Added a wipe section before upload to clear any existing config. Brute force but works.
-# v1.6 : 31-07-2017 - Found the order to read things out is different to writing them back. So 2nd array goes in to fix.
-# v1.7 : 23-08-2017 - Explicitly specifying xml to the JSS seems to help a little with certain edge cases.
-# v1.8 : 30-08-2017 - Enforces xml use with the JSS API. Different java installs default to JSON.
+# Version 0.1 - readwipe and writebk lists separated into files for clarity.
+#               Parameters can now be commented out.
+#				Option to provide config in a private separate file added.
+#				Various changes to curl commands made as they didn't seem to work for me (maybe RedHat-related).
+#				Changed name from JSS-Config-In-A-Box to JSS-API-Instance-Replicator to clarify that this only does API stuff.
 
 # Set up variables here
-export resultInt=1
-export currentver="Forked from 1.8 by GP"
-export currentverdate="30th August 2017"
-
 export xmlloc_default="$HOME/Desktop/JSS_Config"
 export origjssaddress_default="https://myserver"
 export destjssaddress_default="https://myotherserver"
@@ -36,8 +24,22 @@ export destjssapiuser_default="JSS_config_write"
 export origjssinstance_default="source"
 export destjssinstance_default="dest01"
 
-# If you wish to store your confidential config in a separate file, specify it here to overwrite the above values:
+# This script relies on the following files, which contain a list of all the API parameters.
+# Each parameter can be commented in or out, depending on what you wish to copy.
+# Note that two files are necessary because the order has to be slightly different for reading and writing.
+readwipefile="./readwipe.txt"
+writebkfile="./writebk.txt"
+
+# If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
+# The name jciab-conf.sh is by default excluded in .gitignore so that your private data isn't made public:
 configFile="./jciab-conf.sh"
+
+### No need to edit below here
+
+# Reset the internal counter
+export resultInt=1
+
+# Read in the variables from the configFile if it exists.
 if [[ -f "$configFile" ]]; then
 	. "$configFile"
 fi
@@ -45,7 +47,6 @@ fi
 # These are the categories we're going to save or wipe
 rwi=0
 declare -a readwipe
-readwipefile="./readwipe.txt"
 while read -r line; do
 	if [[ ${line:0:1} != '#' && $line ]]; then
 		readwipe[$rwi]="$line"
@@ -56,7 +57,6 @@ done < $readwipefile
 # These are the categories we're going to upload. Ordering is different from read/wipe.
 wbi=0
 declare -a writebk
-writebkfile="./writebk.txt"
 while read -r line; do
 	if [[ ${line:0:1} != '#' && $line ]]; then
 		writebk[$wbi]="$line"
@@ -65,8 +65,7 @@ while read -r line; do
 done < $writebkfile
 
 # Start functions here
-doesxmlfolderexist()
-{
+doesxmlfolderexist() {
 	# Where shall we store all this lovely xml?
 	echo -e "\nPlease enter the path to store data"
 	read -p "(Or enter to use $HOME/Desktop/JSS_Config) : " xmlloc
