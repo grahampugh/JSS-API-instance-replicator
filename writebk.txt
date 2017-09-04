@@ -10,7 +10,7 @@ directorybindings
 # removablemacaddresses
 # netbootservers
 distributionpoints
-softwareupdateservers
+# softwareupdateservers
 # networksegments
 # healthcarelistener
 # ibeacons

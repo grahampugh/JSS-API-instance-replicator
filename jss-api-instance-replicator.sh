@@ -14,12 +14,13 @@
 #				Option to provide config in a private separate file added.
 #				Various changes to curl commands made as they didn't seem to work for me (maybe RedHat-related).
 #				Changed name from JSS-Config-In-A-Box to JSS-API-Instance-Replicator to clarify that this only does API stuff.
+# Version 0.2 - Corrected URL error in account grabbing curl statement.
 
 # Set up variables here
 export xmlloc_default="$HOME/Desktop/JSS_Config"
 export origjssaddress_default="https://myserver"
 export destjssaddress_default="https://myotherserver"
-export origjssapiuser_default="JSS_config_download"
+export origjssapiuser_default="JSS_config_read"
 export destjssapiuser_default="JSS_config_write"
 export origjssinstance_default="source"
 export destjssinstance_default="dest01"
@@ -31,8 +32,8 @@ readwipefile="./readwipe.txt"
 writebkfile="./writebk.txt"
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
-# The name jciab-conf.sh is by default excluded in .gitignore so that your private data isn't made public:
-configFile="./jciab-conf.sh"
+# The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
+configFile="./jss-api-instance-replicator-config.sh"
 
 ### No need to edit below here
 
@@ -129,13 +130,13 @@ grabexistingjssxml()
 		export resultInt=1
 
 		# Work out where things are going to be stored on this loop
-		export formattedList=$xmlloc/${readwipe[$loop]}/id_list/formattedList.xml
-		export plainList=$xmlloc/${readwipe[$loop]}/id_list/plainList
-		export plainListAccountsUsers=$xmlloc/${readwipe[$loop]}/id_list/plainListAccountsUsers
-		export plainListAccountsGroups=$xmlloc/${readwipe[$loop]}/id_list/plainListAccountsGroups
-		export fetchedResult=$xmlloc/${readwipe[$loop]}/fetched_xml/result"$resultInt".xml
-		export fetchedResultAccountsUsers=$xmlloc/${readwipe[$loop]}/fetched_xml/userResult"$resultInt".xml
-		export fetchedResultAccountsGroups=$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult"$resultInt".xml
+		export formattedList="$xmlloc/${readwipe[$loop]}/id_list/formattedList.xml"
+		export plainList="$xmlloc/${readwipe[$loop]}/id_list/plainList.txt"
+		export plainListAccountsUsers="$xmlloc/${readwipe[$loop]}/id_list/plainListAccountsUsers.txt"
+		export plainListAccountsGroups="$xmlloc/${readwipe[$loop]}/id_list/plainListAccountsGroups.txt"
+		export fetchedResult="$xmlloc/${readwipe[$loop]}/fetched_xml/result$resultInt.xml"
+		export fetchedResultAccountsUsers="$xmlloc/${readwipe[$loop]}/fetched_xml/userResult$resultInt.xml"
+		export fetchedResultAccountsGroups="$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult$resultInt.xml"
 
 		# Grab all existing ID's for the current category we're processing
 		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on template JSS \n"
@@ -178,7 +179,7 @@ grabexistingjssxml()
 					for userID in $( cat $plainListAccountsUsers )
 					do
 						echo "Downloading User ID number $userID ( $resultInt out of $totalFetchedIDsUsers )"
-						fetchedResultAccountsUsers=$( curl -s -k $origjssaddress/JSSResource/${readwipe[$loop]}/userid/$userID -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd"  | xmllint --format - )
+						fetchedResultAccountsUsers=$( curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]}/userid/$userID -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd"  | xmllint --format - )
 						itemID=$( echo "$fetchedResultAccountsUsers" | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }')
 						itemName=$( echo "$fetchedResultAccountsUsers" | grep "<name>" | awk -F '<name>|</name>' '{ print $2; exit; }')
 						cleanedName=$( echo "$itemName" | sed 's/[:\/\\]//g' )
@@ -431,10 +432,6 @@ puttonewjss()
 						let "postInt = $postInt + 1"
 						echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
 
-						echo -e <<END
-						curl -sS -k -i -H "Content-Type: application/xml" --form file=@"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
-END
-
 						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 
 					done
@@ -502,22 +499,26 @@ MainMenu()
 				grabexistingjssxml
 			;;
 			2)
+				jssaddress=""
+				jssapiuser=""
 				echo -e "\n"
 				read -p "Enter the destination JSS server address (or enter for $destjssaddress_default) : " jssaddress
 				read -p "Enter the destination JSS server api username (or enter for $destjssapiuser_default) : " jssapiuser
 				read -p "Enter the destination JSS api user password : " -s jssapipwd
 
 				# Read in defaults if not entered
-				if [[ -z $jssaddress ]]; then
+				if [[ -z "$jssaddress" ]]; then
 					jssaddress="$destjssaddress_default"
 				fi
-				if [[ -z $jssapiuser ]]; then
+				if [[ -z "$jssapiuser" ]]; then
 					jssapiuser="$destjssapiuser_default"
 				fi
 
-				export destjssaddress=$jssaddress
-				export destjssapiuser=$jssapiuser
-				export destjssapipwd=$jssapipwd
+				echo "JSS User: $jssapiuser"
+
+				export destjssaddress="$jssaddress"
+				export destjssapiuser="$jssapiuser"
+				export destjssapipwd="$jssapipwd"
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
