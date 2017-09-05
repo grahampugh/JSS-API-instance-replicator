@@ -496,8 +496,8 @@ MainMenu()
 	do
 		echo -e "\nMain Menu"
 		echo -e "=========\n"
-		echo -e "1) Download config from original JSS"
-		echo -e "2) Upload config to new JSS instance"
+		echo -e "1) Download config from source/template JSS"
+		echo -e "2) Upload config to destination JSS instance"
 		echo -e "3) Create initial JSS API users (without passwords)"
 
 		echo -e "q) Quit!\n"
