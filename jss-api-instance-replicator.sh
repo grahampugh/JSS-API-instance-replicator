@@ -25,6 +25,13 @@ export destjssapiuser_default="JSS_config_write"
 export origjssinstance_default="source"
 export destjssinstance_default="dest01"
 
+# API user template files.
+# These files can be created by copy-pasting code from the API resource after the first manual setup of an instance
+export userXMLTemplatesDir="User_XML_templates"
+export API_user_JSS_config_read="$userXMLTemplatesDir/JSS_API_read.xml"
+export API_user_JSS_config_write="$userXMLTemplatesDir/JSS_API_write.xml"
+export API_user_AutoPkg="$userXMLTemplatesDir/AutoPkg.xml"
+
 # This script relies on the following files, which contain a list of all the API parameters.
 # Each parameter can be commented in or out, depending on what you wish to copy.
 # Note that two files are necessary because the order has to be slightly different for reading and writing.
@@ -145,6 +152,7 @@ grabexistingjssxml()
 
 		if [ ${readwipe[$loop]} = "accounts" ];
 		then
+			# Accounts have to be treated differently
 			if [ $(cat "$formattedList" | grep "<users/>" | wc -l | awk '{ print $1 }') = "0" ];
 			then
 				echo "Creating plain list of user ID's..."
@@ -160,6 +168,9 @@ grabexistingjssxml()
 			else
 				rm $formattedList
 			fi
+		elif [[ ${readwipe[$loop]} = "smtpserver" || ${readwipe[$loop]} = "activationcode" ]]; then
+			echo "Parsing ${readwipe[$loop]}"
+			cat $formattedList > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_result1.xml
 		else
 			if [ $(cat "$formattedList" | grep "<size>0" | wc -l | awk '{ print $1 }') = "0" ];
 			then
@@ -303,6 +314,10 @@ wipejss()
 		if [ ${readwipe[$loop]} = "accounts" ];
 		then
 			echo -e "\nSkipping ${readwipe[$loop]} category. Or we can't get back in!"
+
+		elif [[ ${readwipe[$loop]} = "smtpserver" || ${readwipe[$loop]} = "activationcode" ]]; then
+			echo -e "\nSkipping ${readwipe[$loop]} category as no delete option is available via API."
+
 		else
 			# Set our result incremental variable to 1
 			export resultInt=1
@@ -423,6 +438,17 @@ puttonewjss()
 					done
 				;;
 
+				smtpserver|activationcode)
+					echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
+					for parsedXML in $(ls $xmlloc/${writebk[$loop]}/parsed_xml)
+					do
+						echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
+
+						curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}
+
+					done
+				;;
+
 				*)
 					totalParsedResourceXML=$(ls $xmlloc/${writebk[$loop]}/parsed_xml | wc -l | sed -e 's/^[ \t]*//')
 					postInt=0
@@ -446,6 +472,20 @@ puttonewjss()
 	IFS=$OIFS
 }
 
+writeAPIuser() {
+	# This function creates the API users. It requires the use of the "master" admin account to do this.
+	# Note that it cannot write passwords, so you need to login as the master admin after creating the account
+	# and go to Settings -> Users, and add the password(s) manually.
+
+	# Insert the users
+	echo
+	echo -e "Creating user $API_user for $jssinstance using template at $API_user_file..."
+
+	curl -s -k -i -H "Content-Type: application/xml" -d @"$API_user_file" --user "$jssapiuser:$jssapipwd" $jssaddress/$jssinstance/JSSResource/accounts/userid/0 && \
+		echo -e "Created $API_user for $jssinstance." || \
+		echo -e "Could not create $API_user for $jssinstance."
+}
+
 MainMenu()
 {
 	# Set IFS to only use new lines as field separator.
@@ -458,10 +498,11 @@ MainMenu()
 		echo -e "=========\n"
 		echo -e "1) Download config from original JSS"
 		echo -e "2) Upload config to new JSS instance"
+		echo -e "3) Create initial JSS API users (without passwords)"
 
 		echo -e "q) Quit!\n"
 
-		read -p "Choose an option (1-2 / q) : " choice
+		read -p "Choose an option (1-3 / q) : " choice
 
 		case "$choice" in
 			1)
@@ -514,8 +555,6 @@ MainMenu()
 					jssapiuser="$destjssapiuser_default"
 				fi
 
-				echo "JSS User: $jssapiuser"
-
 				export destjssaddress="$jssaddress"
 				export destjssapiuser="$jssapiuser"
 				export destjssapipwd="$jssapipwd"
@@ -526,6 +565,9 @@ MainMenu()
 				read -p "(Enter '/' for a non-context JSS) : " jssinstance
 
 				# Check for the default or non-context
+				if [[ -z "$jssaddress" ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
 				if [[ $jssinstance == "/" ]]; then
 					jssinstance=""
 				elif [[ -z $jssinstance ]]; then
@@ -537,8 +579,45 @@ MainMenu()
 				wipejss
 				puttonewjss
 			;;
+			3)
+				# Ask which instance we need to process, check if it exists and go from there
+				echo -e "\n"
+				read -p "Enter the destination JSS server address (or enter for $destjssaddress_default) : " jssaddress
+				echo "Enter the destination JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+				read -p "Enter the destination JSS server api username : " jssapiuser
+				read -p "Enter the destination JSS api user password : " -s jssapipwd
+				echo "Enter the account name to create from the following list: "
+				find $userXMLTemplatesDir/* -maxdepth 0 -type f 2>/dev/null | sed -e 's/.*\///' | sed -e 's/\..*//'
+				read -p "Enter one of the above : " API_user
+
+				# Read in defaults if not entered
+				if [[ -z $jssaddress ]]; then
+					jssaddress="$origjssaddress_default"
+				fi
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="$origjssapiuser_default"
+				fi
+
+				# Check for the default or non-context
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance=""
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="$destjssinstance_default"
+				fi
+
+				# Account creations using the API
+				export API_user_file="$userXMLTemplatesDir/$API_user.xml"
+				if [[ ! -f "$API_user_file" ]]; then
+					echo "$API_user_file does not exist!"
+					return 1
+				fi
+
+				writeAPIuser
+				jssinstance=""
+			;;
 			q)
-				echo -e "\nThank you for using JSS Config in a Box!"
+				echo -e "\nThank you for using JSS API Instance Replicator!"
 			;;
 			*)
 				echo -e "\nIncorrect input. Please try again."
