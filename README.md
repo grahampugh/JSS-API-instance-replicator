@@ -37,3 +37,4 @@ The third option creates the API users, requiring access to XML files that have 
 ### TO DO
 
 * Automation capabilities using command-line flags.
+* Stop wiping properties automatically - need to update / add rather than wipe all the time.
