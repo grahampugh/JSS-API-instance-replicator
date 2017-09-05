@@ -15,6 +15,7 @@
 #				Various changes to curl commands made as they didn't seem to work for me (maybe RedHat-related).
 #				Changed name from JSS-Config-In-A-Box to JSS-API-Instance-Replicator to clarify that this only does API stuff.
 # Version 0.2 - Corrected URL error in account grabbing curl statement.
+# Version 0.3 - Added creation of new API users, fixed smtpserver & activationcode get/push.
 
 # Set up variables here
 export xmlloc_default="$HOME/Desktop/JSS_Config"
