@@ -16,6 +16,16 @@
 #				Changed name from JSS-Config-In-A-Box to JSS-API-Instance-Replicator to clarify that this only does API stuff.
 # Version 0.2 - Corrected URL error in account grabbing curl statement.
 # Version 0.3 - Added creation of new API users, fixed smtpserver & activationcode get/push.
+# Version 0.4 - Added icon grab to import into policy. This requires access to a folder containing all the icons.
+#				If there is no icon with a matching name in the folder, no icon will be imported.
+#				The icon name must match the policy name minus the version number,
+#				e.g. Adobe Reader 2015.png for policy Adobe Reader 2015 19.0.11
+
+# If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
+# The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
+# Config file
+export servername=${HOSTNAME%%.}
+export config_override_file="jss-api-instance-replicator-config.$servername.sh"
 
 # Set up variables here
 export xmlloc_default="$HOME/Desktop/JSS_Config"
@@ -36,12 +46,14 @@ export API_user_AutoPkg="$userXMLTemplatesDir/AutoPkg.xml"
 # This script relies on the following files, which contain a list of all the API parameters.
 # Each parameter can be commented in or out, depending on what you wish to copy.
 # Note that two files are necessary because the order has to be slightly different for reading and writing.
-readwipefile="./readwipe.txt"
-writebkfile="./writebk.txt"
+export readwipefile="./readwipe.txt"
+export writebkfile="./writebk.txt"
 
-# If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
-# The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
-configFile="./jss-api-instance-replicator-config.sh"
+# icons folder
+# To get icons to import, you need to provide them in a folder. This script will attempt to match the policy name (minus version number)
+# to the name of the icon. If it's not there, it will skip the icon import.
+export icons_folder="/Volumes/Packaging/mac-resources/AutoPkg/icons/128x128"
+
 
 ### No need to edit below here
 
@@ -265,8 +277,21 @@ grabexistingjssxml()
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
 						else
 							echo "Processing policy file $resourceXML ."
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers>/d' | sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
-							# cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers>/d' | sed '/<self_service_icon>/,/<\/self_service_icon>/d' | sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<filename>/,/<\/filename>/d' | sed '/<uri>/,/<\/uri>/d' | sed '/<\/self_service_icon>/d'
+
+							# Re-add icon from local source - first get the icon name from the policy name
+							policy_name="$( cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' | awk '{$NF=""; print $0}' )"
+							icon_name="$policy_name.png"
+
+							# Now strip out the filename and uri tags
+							# Now add the path to the filename into the XML file if it exists
+							if [[ -f ""$icons_folder/$icon_name"" ]]; then
+								cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed 's/<self_service_icon>/<self_service_icon>'"$icons_folder/$icon_name"'<\/self_service_icon>/'
+							else
+								cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<self_service_icon>/d'
+							fi
 						fi
 					done
 				;;
