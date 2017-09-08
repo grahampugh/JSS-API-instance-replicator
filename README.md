@@ -26,13 +26,15 @@ Once you have those in place:
    You will be asked for a location to store xml data from the JSS API.  
    If data already exists, then you'll be asked if you wish to archive it. Otherwise the folders will be created.
 
-3. You have three choices:
+3. You have four choices:
 
-    * Download config from a source/template JSS.  
-    * Upload config to destination JSS instance.  
-    * Create initial JSS API users (without passwords).  
+    1) Create initial JSS API users (without passwords)
+    2) Download config from source/template JSS
+    3) Upload config to destination JSS instance (no wipe)
+    4) Wipe destination JSS instance and upload config
+    q) Quit!
 
-The third option creates the API users, requiring access to XML files that have previously been generated.
+The first option creates the API users, requiring access to XML files that have previously been generated.
 
 ### TO DO
 

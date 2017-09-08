@@ -20,11 +20,15 @@
 #				If there is no icon with a matching name in the folder, no icon will be imported.
 #				The icon name must match the policy name minus the version number,
 #				e.g. Adobe Reader 2015.png for policy Adobe Reader 2015 19.0.11
+# Version 0.5   Added option for keeping separate config files for different servers
+# Version 0.6	Added option for not deleting the destination (option 3). Moved wipe-and-write to Option 4.
+#				Now does not overwrite existing Static Groups when in overwrite mode, as we don't want to wipe the membership.
+
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
 # Config file
-export servername=${HOSTNAME%%.}
+export servername="id-jps-tst-1"
 export config_override_file="jss-api-instance-replicator-config.$servername.sh"
 
 # Set up variables here
@@ -61,8 +65,8 @@ export icons_folder="/Volumes/Packaging/mac-resources/AutoPkg/icons/128x128"
 export resultInt=1
 
 # Read in the variables from the configFile if it exists.
-if [[ -f "$configFile" ]]; then
-	. "$configFile"
+if [[ -f "$config_override_file" ]]; then
+	. "$config_override_file"
 fi
 
 # These are the categories we're going to save or wipe
@@ -142,6 +146,8 @@ grabexistingjssxml()
 	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
+
+	clear
 
 	# Loop around the array of JSS categories we set up earlier.
 	for (( loop=0; loop<${#readwipe[@]}; loop++ ))
@@ -276,22 +282,8 @@ grabexistingjssxml()
 						then
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
 						else
-							echo "Processing policy file $resourceXML ."
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
-
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<filename>/,/<\/filename>/d' | sed '/<uri>/,/<\/uri>/d' | sed '/<\/self_service_icon>/d'
-
-							# Re-add icon from local source - first get the icon name from the policy name
-							policy_name="$( cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' | awk '{$NF=""; print $0}' )"
-							icon_name="$policy_name.png"
-
-							# Now strip out the filename and uri tags
-							# Now add the path to the filename into the XML file if it exists
-							if [[ -f ""$icons_folder/$icon_name"" ]]; then
-								cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed 's/<self_service_icon>/<self_service_icon>'"$icons_folder/$icon_name"'<\/self_service_icon>/'
-							else
-								cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<self_service_icon>/d'
-							fi
+							echo "Processing policy file $resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | grep -v '<self_service_icon>' | grep -v '<filename>' | grep -v '<uri>' | grep -v '</self_service_icon>' | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
 						fi
 					done
 				;;
@@ -323,6 +315,7 @@ wipejss()
 
 	# THIS IS YOUR LAST CHANCE TO PUSH THE CANCELLATION BUTTON
 
+	clear
 	echo -e "\nThis action will erase the destination JSS before upload."
 	echo "Are you utterly sure you want to do this?"
 	read -p "(Default is NO. Type YES to go ahead) : " arewesure
@@ -393,6 +386,7 @@ puttonewjss()
 	OIFS=$IFS
 	IFS=$'\n'
 
+	clear
 	echo -e "Writing to $jssinstance"
 
 	for (( loop=0; loop<${#writebk[@]}; loop++ ))
@@ -402,7 +396,7 @@ puttonewjss()
 			# Set our result incremental variable to 1
 			export resultInt=1
 
-			echo -e "\n\nPosting ${writebk[$loop]} to new JSS instance: $destjssaddress$jssinstance"
+			echo -e "\n\nPosting ${writebk[$loop]} to JSS instance: $destjssaddress$jssinstance"
 
 			case "${writebk[$loop]}" in
 				accounts)
@@ -446,8 +440,17 @@ puttonewjss()
 						let "postInt_static = $postInt_static + 1"
 						echo -e "\nPosting $parsedXML_static ( $postInt_static out of $totalParsedResourceXML_staticGroups )"
 
-						curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
-
+						# look for existing policy and update it rather than create a new one if it exists
+						# Re-add icon from local source - first get the policy name from the parsed XML
+						existing_name="$( cat $parsedXML_static | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						if [[ $existing_id ]]; then
+							echo "Static group $existing_name already exists - not overwriting..."
+							# curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+						else
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+						fi
 					done
 
 					echo -e "\nPosting smart computer groups"
@@ -460,8 +463,16 @@ puttonewjss()
 						let "postInt_smart = $postInt_smart + 1"
 						echo -e "\nPosting $parsedXML_smart ( $postInt_smart out of $totalParsedResourceXML_smartGroups )"
 
-						curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
-
+						# look for existing policy and update it rather than create a new one if it exists
+						# Re-add icon from local source - first get the policy name from the parsed XML
+						existing_name="$( cat $parsedXML_smart | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						if [[ $existing_id ]]; then
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+						else
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+						fi
 					done
 				;;
 
@@ -476,6 +487,58 @@ puttonewjss()
 					done
 				;;
 
+				policies)
+					totalParsedResourceXML=$(ls $xmlloc/${writebk[$loop]}/parsed_xml | wc -l | sed -e 's/^[ \t]*//')
+					postInt=0
+
+					for parsedXML in $(ls $xmlloc/${writebk[$loop]}/parsed_xml)
+					do
+						let "postInt = $postInt + 1"
+						echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
+
+						# look for existing policy and update it rather than create a new one if it exists
+						# Re-add icon from local source - first get the policy name from the parsed XML
+						existing_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						if [[ $existing_id ]]; then
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+						else
+							# existing policy not found, creating new one
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+
+							# Re-add icon from local source - first get the icon name from the policy name
+							policy_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+							software_name=$( echo "$policy_name" | awk '{$NF=""; print $0}' | xargs )
+							icon_name="$software_name.png"
+
+							# If an icon exists in our repo, upload it.
+							# Method thanks to https://list.jamfsoftware.com/jamf-nation/discussions/23231/mass-icon-upload
+							if [[ -f "$icons_folder/$icon_name" ]]; then
+	 							echo -e "\nIcon found: $icons_folder/$icon_name"
+								echo -e "Policy Name: $policy_name"
+
+								# To upload the file we need to know the policy number that was just created.
+								# To do this we submit a request based on the policy name
+								policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
+								policy_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+
+								echo -e "Policy number $policy_id identified..."
+
+								# Now upload the file to the correct policy_id
+								curl -s -k -i -F name=@"$icons_folder/$icon_name" --user "$destjssapiuser:$destjssapipwd" "$destjssaddress$jssinstance/JSSResource/fileuploads/policies/id/$policy_id"
+								if [ "$?" == 0 ]; then
+									echo -e "\n$icon_name successfully uploaded"
+								else
+									echo -e "\n$icon_name errored when attempting to upload it. Continuing..."
+								fi
+							else
+								echo -e "\nIcon $icon_name not found. Continuing..."
+							fi
+						fi
+					done
+				;;
+
 				*)
 					totalParsedResourceXML=$(ls $xmlloc/${writebk[$loop]}/parsed_xml | wc -l | sed -e 's/^[ \t]*//')
 					postInt=0
@@ -485,8 +548,16 @@ puttonewjss()
 						let "postInt = $postInt + 1"
 						echo -e "\nPosting $parsedXML ( $postInt out of $totalParsedResourceXML )"
 
-						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
-
+						# look for existing entry and update it rather than create a new one if it exists
+						# Re-add icon from local source - first get the policy name from the parsed XML
+						existing_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						if [[ $existing_id ]]; then
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+						else
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+						fi
 					done
 				;;
 			esac
@@ -505,7 +576,7 @@ writeAPIuser() {
 	# and go to Settings -> Users, and add the password(s) manually.
 
 	# Insert the users
-	echo
+	clear
 	echo -e "Creating user $API_user for $jssinstance using template at $API_user_file..."
 
 	curl -s -k -i -H "Content-Type: application/xml" -d @"$API_user_file" --user "$jssapiuser:$jssapipwd" $jssaddress/$jssinstance/JSSResource/accounts/userid/0 && \
@@ -523,9 +594,10 @@ MainMenu()
 	do
 		echo -e "\nMain Menu"
 		echo -e "=========\n"
-		echo -e "1) Download config from source/template JSS"
-		echo -e "2) Upload config to destination JSS instance"
-		echo -e "3) Create initial JSS API users (without passwords)"
+		echo -e "1) Create initial JSS API users (without passwords)"
+		echo -e "2) Download config from source/template JSS"
+		echo -e "3) Upload config to destination JSS instance (no wipe)"
+		echo -e "4) Wipe destination JSS instance and upload config"
 
 		echo -e "q) Quit!\n"
 
@@ -533,26 +605,59 @@ MainMenu()
 
 		case "$choice" in
 			1)
+				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				read -p "Enter the originating JSS server address (or enter for $origjssaddress_default) : " jssaddress
-				read -p "Enter the originating JSS server api username (or enter for $origjssapiuser_default) : " jssapiuser
-				read -p "Enter the originating JSS api user password : " -s jssapipwd
+				read -p "Enter the JSS server address (or enter for $destjssaddress_default) : " jssaddress
+				echo "Enter the JSS instance name to which to create API user (or enter for '$destjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+
+				# Read in defaults if not entered
+				if [[ -z $jssaddress ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
+
+				# Check for the default or non-context
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance=""
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="$destjssinstance_default"
+				fi
+
+				read -p "Enter the $jssinstance JSS admin username (or enter for 'jamfadmin'): " jssapiuser
+				read -p "Enter the $jssinstance JSS admin user password : " -s jssapipwd
+
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="jamfadmin"
+				fi
+
+				echo "Enter the account name to create from the following list: "
+				find $userXMLTemplatesDir/* -maxdepth 0 -type f 2>/dev/null | sed -e 's/.*\///' | sed -e 's/\..*//'
+				read -p "Enter one of the above : " API_user
+
+				# Account creations using the API
+				export API_user_file="$userXMLTemplatesDir/$API_user.xml"
+				if [[ ! -f "$API_user_file" ]]; then
+					echo "$API_user_file does not exist!"
+					return 1
+				fi
+
+				writeAPIuser
+				jssinstance=""
+			;;
+			2)
+				echo -e "\n"
+				read -p "Enter the JSS server address (or enter for $origjssaddress_default) : " jssaddress
 
 				# Read in defaults if not entered
 				if [[ -z $jssaddress ]]; then
 					jssaddress="$origjssaddress_default"
 				fi
-				if [[ -z $jssapiuser ]]; then
-					jssapiuser="$origjssapiuser_default"
-				fi
 
 				export origjssaddress=$jssaddress
-				export origjssapiuser=$jssapiuser
-				export origjssapipwd=$jssapipwd
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				echo "Enter the originating JSS instance name from which to download API data (or enter for '$origjssinstance_default')"
+				echo "Enter the JSS instance name from which to download API data (or enter for '$origjssinstance_default')"
 				read -p "(Enter '/' for a non-context JSS) : " jssinstance
 
 				# Check for the default or non-context
@@ -564,31 +669,34 @@ MainMenu()
 					jssinstance="/$jssinstance"
 				fi
 
+				read -p "Enter the $jssinstance API username (or enter for $origjssapiuser_default) : " jssapiuser
+				read -p "Enter the $jssinstance API user password : " -s jssapipwd
+
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="$origjssapiuser_default"
+				fi
+
+				export origjssapiuser=$jssapiuser
+				export origjssapipwd=$jssapipwd
+
 				grabexistingjssxml
 			;;
-			2)
+			3)
 				jssaddress=""
 				jssapiuser=""
 				echo -e "\n"
-				read -p "Enter the destination JSS server address (or enter for $destjssaddress_default) : " jssaddress
-				read -p "Enter the destination JSS server api username (or enter for $destjssapiuser_default) : " jssapiuser
-				read -p "Enter the destination JSS api user password : " -s jssapipwd
+				read -p "Enter the JSS server address (or enter for $destjssaddress_default) : " jssaddress
 
 				# Read in defaults if not entered
 				if [[ -z "$jssaddress" ]]; then
 					jssaddress="$destjssaddress_default"
 				fi
-				if [[ -z "$jssapiuser" ]]; then
-					jssapiuser="$destjssapiuser_default"
-				fi
 
 				export destjssaddress="$jssaddress"
-				export destjssapiuser="$jssapiuser"
-				export destjssapipwd="$jssapipwd"
 
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
-				echo "Enter the destination JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
+				echo "Enter the JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
 				read -p "(Enter '/' for a non-context JSS) : " jssinstance
 
 				# Check for the default or non-context
@@ -603,45 +711,60 @@ MainMenu()
 					jssinstance="/$jssinstance"
 				fi
 
-				wipejss
+				read -p "Enter the $jssinstance API username (or enter for $destjssapiuser_default) : " jssapiuser
+				read -p "Enter the $jssinstance API user password : " -s jssapipwd
+
+				if [[ -z "$jssapiuser" ]]; then
+					jssapiuser="$destjssapiuser_default"
+				fi
+
+				export destjssapiuser="$jssapiuser"
+				export destjssapipwd="$jssapipwd"
+
 				puttonewjss
 			;;
-			3)
-				# Ask which instance we need to process, check if it exists and go from there
+			4)
+				jssaddress=""
+				jssapiuser=""
 				echo -e "\n"
-				read -p "Enter the destination JSS server address (or enter for $destjssaddress_default) : " jssaddress
-				echo "Enter the destination JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
-				read -p "(Enter '/' for a non-context JSS) : " jssinstance
-				read -p "Enter the destination JSS server api username : " jssapiuser
-				read -p "Enter the destination JSS api user password : " -s jssapipwd
-				echo "Enter the account name to create from the following list: "
-				find $userXMLTemplatesDir/* -maxdepth 0 -type f 2>/dev/null | sed -e 's/.*\///' | sed -e 's/\..*//'
-				read -p "Enter one of the above : " API_user
+				read -p "Enter the JSS server address (or enter for $destjssaddress_default) : " jssaddress
 
 				# Read in defaults if not entered
-				if [[ -z $jssaddress ]]; then
-					jssaddress="$origjssaddress_default"
-				fi
-				if [[ -z $jssapiuser ]]; then
-					jssapiuser="$origjssapiuser_default"
+				if [[ -z "$jssaddress" ]]; then
+					jssaddress="$destjssaddress_default"
 				fi
 
+				export destjssaddress="$jssaddress"
+
+				# Ask which instance we need to process, check if it exists and go from there
+				echo -e "\n"
+				echo "Enter the JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+
 				# Check for the default or non-context
+				if [[ -z "$jssaddress" ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
 				if [[ $jssinstance == "/" ]]; then
 					jssinstance=""
 				elif [[ -z $jssinstance ]]; then
-					jssinstance="$destjssinstance_default"
+					jssinstance="/$destjssinstance_default"
+				else
+					jssinstance="/$jssinstance"
 				fi
 
-				# Account creations using the API
-				export API_user_file="$userXMLTemplatesDir/$API_user.xml"
-				if [[ ! -f "$API_user_file" ]]; then
-					echo "$API_user_file does not exist!"
-					return 1
+				read -p "Enter the $jssinstance API username (or enter for $destjssapiuser_default) : " jssapiuser
+				read -p "Enter the $jssinstance API user password : " -s jssapipwd
+
+				if [[ -z "$jssapiuser" ]]; then
+					jssapiuser="$destjssapiuser_default"
 				fi
 
-				writeAPIuser
-				jssinstance=""
+				export destjssapiuser="$jssapiuser"
+				export destjssapipwd="$jssapipwd"
+
+				wipejss
+				puttonewjss
 			;;
 			q)
 				echo -e "\nThank you for using JSS API Instance Replicator!"
@@ -658,16 +781,15 @@ MainMenu()
 
 # Start menu screen here
 clear
-echo -e "\n----------------------------------------"
-echo -e "\n          JSS Config in a Box"
-echo -e "\n----------------------------------------"
-echo -e "    Version $currentver - $currentverdate"
-echo -e "----------------------------------------\n"
+echo -e "\n---------------------------"
+echo -e "\nJSS API Instance Replicator"
+echo -e "\n---------------------------"
+echo
 echo -e "** Very Important Info **"
 echo -e "\n1. Passwords WILL NOT be migrated with standard accounts. You must put these in again manually."
 echo -e "2. Both macOS and iOS devices will NOT be migrated at all."
 echo -e "3. Smart Computer Groups will only contain logic information."
-echo -e "4. Static Computer groups will only contain name and site membership. Devices must be added manually."
+echo -e "4. Static Computer groups will NOT be migrated at all."
 echo -e "5. Distribution Point failover settings will NOT be included."
 echo -e "6. Distribution Point passwords for Casper R/O and Casper R/W accounts will NOT be included."
 echo -e "7. LDAP Authentication passwords will NOT be included."
@@ -675,7 +797,9 @@ echo -e "8. Directory Binding account passwords will NOT be included."
 echo -e "9. Individual computers that are excluded from restricted software items WILL NOT be included in migration."
 echo -e "10. Policies that are not assigned to a category will NOT be migrated."
 echo -e "11. Policies that have Self Service icons and individual computers as a scope or exclusion will have these items missing."
-echo -e "12. Policies with LDAP Users and Groups limitations will have these stripped before migration."
+echo -e "12. Self Service icons will be uploaded from a named folder, "
+echo -e "    ONLY if the icon name matches the policy name minus version number."
+echo -e "13. Policies with LDAP Users and Groups limitations will have these stripped before migration."
 
 # Call functions to make this work here
 doesxmlfolderexist
