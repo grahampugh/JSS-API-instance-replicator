@@ -23,7 +23,9 @@
 # Version 0.5   Added option for keeping separate config files for different servers
 # Version 0.6	Added option for not deleting the destination (option 3). Moved wipe-and-write to Option 4.
 #				Now does not overwrite existing Static Groups when in overwrite mode, as we don't want to wipe the membership.
-
+# Version 0.7	Added wipe-only option.
+# 				Changed writebk to write to destination instance with same IDs as source, otherwise things break.
+#				Obviously this is vulnerable, but in particular policies with packages just won't work otherwise.
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
@@ -52,6 +54,8 @@ export API_user_AutoPkg="$userXMLTemplatesDir/AutoPkg.xml"
 # Note that two files are necessary because the order has to be slightly different for reading and writing.
 export readwipefile="./readwipe.txt"
 export writebkfile="./writebk.txt"
+# the clear_policies_file is used when wiping an instance only. It actually clears out policies and smart groups.
+export clear_policies_file="./clear_policies.txt"
 
 # icons folder
 # To get icons to import, you need to provide them in a folder. This script will attempt to match the policy name (minus version number)
@@ -69,25 +73,6 @@ if [[ -f "$config_override_file" ]]; then
 	. "$config_override_file"
 fi
 
-# These are the categories we're going to save or wipe
-rwi=0
-declare -a readwipe
-while read -r line; do
-	if [[ ${line:0:1} != '#' && $line ]]; then
-		readwipe[$rwi]="$line"
-		rwi=$((rwi+1))
-	fi
-done < $readwipefile
-
-# These are the categories we're going to upload. Ordering is different from read/wipe.
-wbi=0
-declare -a writebk
-while read -r line; do
-	if [[ ${line:0:1} != '#' && $line ]]; then
-		writebk[$wbi]="$line"
-		wbi=$((wbi+1))
-	fi
-done < $writebkfile
 
 # Start functions here
 doesxmlfolderexist() {
@@ -263,10 +248,10 @@ grabexistingjssxml()
 						if [[ $(cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<is_smart>false</is_smart>") ]]
 						then
 							echo "$resourceXML is a static computer group"
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/static_group_parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/static_group_parsed_"$resourceXML"
 						else
 							echo "$resourceXML is a smart computer group..."
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/smart_group_parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/smart_group_parsed_"$resourceXML"
 						fi
 					done
 				;;
@@ -283,18 +268,18 @@ grabexistingjssxml()
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
 						else
 							echo "Processing policy file $resourceXML"
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" | grep -v '<self_service_icon>' | grep -v '<filename>' | grep -v '<uri>' | grep -v '</self_service_icon>' | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v '<self_service_icon>' | grep -v '<filename>' | grep -v '<uri>' | grep -v '</self_service_icon>' | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
 						fi
 					done
 				;;
 
 				*)
-					echo -e "\nNo special parsing needed for: ${readwipe[$loop]}. Removing references to ID's\n"
+					echo -e "\nNo special parsing needed for: ${readwipe[$loop]}.\n"
 
 					for resourceXML in $(ls $xmlloc/${readwipe[$loop]}/fetched_xml)
 					do
 						echo "Parsing $resourceXML"
-						cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v "<id>" > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+						cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
 					done
 				;;
 			esac
@@ -442,14 +427,15 @@ puttonewjss()
 
 						# look for existing policy and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
-						existing_name="$( cat $parsedXML_static | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
-						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						source_name="$( cat $parsedXML_static | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_id="$( cat $parsedXML_static | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
-							echo "Static group $existing_name already exists - not overwriting..."
+							echo "Static group $source_name already exists - not overwriting..."
 							# curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
 						fi
 					done
 
@@ -463,15 +449,16 @@ puttonewjss()
 						let "postInt_smart = $postInt_smart + 1"
 						echo -e "\nPosting $parsedXML_smart ( $postInt_smart out of $totalParsedResourceXML_smartGroups )"
 
-						# look for existing policy and update it rather than create a new one if it exists
+						# look for existing entry and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
-						existing_name="$( cat $parsedXML_smart | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
-						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						source_name="$( cat $parsedXML_smart | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_id="$( cat $parsedXML_smart | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
 						fi
 					done
 				;;
@@ -498,14 +485,15 @@ puttonewjss()
 
 						# look for existing policy and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
-						existing_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
-						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_id="$( cat $parsedXML | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							# existing policy not found, creating new one
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							# existing policy not found, creating new one with the source_id
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
 
 							# Re-add icon from local source - first get the icon name from the policy name
 							policy_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
@@ -518,15 +506,15 @@ puttonewjss()
 	 							echo -e "\nIcon found: $icons_folder/$icon_name"
 								echo -e "Policy Name: $policy_name"
 
-								# To upload the file we need to know the policy number that was just created.
-								# To do this we submit a request based on the policy name
-								policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
-								policy_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
-
-								echo -e "Policy number $policy_id identified..."
+								# # To upload the file we need to know the policy number that was just created.
+								# # To do this we submit a request based on the policy name
+								# policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
+								# policy_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+								#
+								# echo -e "Policy number $policy_id identified..."
 
 								# Now upload the file to the correct policy_id
-								curl -s -k -i -F name=@"$icons_folder/$icon_name" --user "$destjssapiuser:$destjssapipwd" "$destjssaddress$jssinstance/JSSResource/fileuploads/policies/id/$policy_id"
+								curl -s -k -i -F name=@"$icons_folder/$icon_name" --user "$destjssapiuser:$destjssapipwd" "$destjssaddress$jssinstance/JSSResource/fileuploads/policies/id/$source_id"
 								if [ "$?" == 0 ]; then
 									echo -e "\n$icon_name successfully uploaded"
 								else
@@ -550,13 +538,14 @@ puttonewjss()
 
 						# look for existing entry and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
-						existing_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						existing_name_urlencode="$( echo "$existing_name" | sed -e 's| |%20|g' )"
-						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$existing_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_id="$( cat $parsedXML | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
+						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
 						fi
 					done
 				;;
@@ -581,7 +570,7 @@ writeAPIuser() {
 
 	curl -s -k -i -H "Content-Type: application/xml" -d @"$API_user_file" --user "$jssapiuser:$jssapipwd" $jssaddress/$jssinstance/JSSResource/accounts/userid/0 && \
 		echo -e "Created $API_user for $jssinstance." || \
-		echo -e "Could not create $API_user for $jssinstance."
+		echo -e "Could not create $API_user for $jssinstance (perhaps it already exists?)."
 }
 
 MainMenu()
@@ -598,6 +587,7 @@ MainMenu()
 		echo -e "2) Download config from source/template JSS"
 		echo -e "3) Upload config to destination JSS instance (no wipe)"
 		echo -e "4) Wipe destination JSS instance and upload config"
+		echo -e "5) Wipe JSS instance of policy/smart group data"
 
 		echo -e "q) Quit!\n"
 
@@ -679,6 +669,16 @@ MainMenu()
 				export origjssapiuser=$jssapiuser
 				export origjssapipwd=$jssapipwd
 
+				# These are the categories we're going to save
+				rwi=0
+				declare -a readwipe
+				while read -r line; do
+					if [[ ${line:0:1} != '#' && $line ]]; then
+						readwipe[$rwi]="$line"
+						rwi=$((rwi+1))
+					fi
+				done < $readwipefile
+
 				grabexistingjssxml
 			;;
 			3)
@@ -720,6 +720,16 @@ MainMenu()
 
 				export destjssapiuser="$jssapiuser"
 				export destjssapipwd="$jssapipwd"
+
+				# These are the categories we're going to upload. Ordering is different from read/wipe.
+				wbi=0
+				declare -a writebk
+				while read -r line; do
+					if [[ ${line:0:1} != '#' && $line ]]; then
+						writebk[$wbi]="$line"
+						wbi=$((wbi+1))
+					fi
+				done < $writebkfile
 
 				puttonewjss
 			;;
@@ -763,8 +773,72 @@ MainMenu()
 				export destjssapiuser="$jssapiuser"
 				export destjssapipwd="$jssapipwd"
 
+				# These are the categories we're going to wipe
+				rwi=0
+				declare -a readwipe
+				while read -r line; do
+					if [[ ${line:0:1} != '#' && $line ]]; then
+						readwipe[$rwi]="$line"
+						rwi=$((rwi+1))
+					fi
+				done < $readwipefile
+
 				wipejss
 				puttonewjss
+			;;
+			5)
+				jssaddress=""
+				jssapiuser=""
+				echo -e "\n"
+				read -p "Enter the JSS server address (or enter for $destjssaddress_default) : " jssaddress
+
+				# Read in defaults if not entered
+				if [[ -z "$jssaddress" ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
+
+				export destjssaddress="$jssaddress"
+
+				# Ask which instance we need to process, check if it exists and go from there
+				echo -e "\n"
+				echo "Enter the JSS instance name you wish to wipe (or enter for '$destjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+
+				# Check for the default or non-context
+				if [[ -z "$jssaddress" ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance=""
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="/$destjssinstance_default"
+				else
+					jssinstance="/$jssinstance"
+				fi
+
+				read -p "Enter the $jssinstance API username (or enter for $destjssapiuser_default) : " jssapiuser
+				read -p "Enter the $jssinstance API user password : " -s jssapipwd
+
+				if [[ -z "$jssapiuser" ]]; then
+					jssapiuser="$destjssapiuser_default"
+				fi
+
+				export destjssapiuser="$jssapiuser"
+				export destjssapipwd="$jssapipwd"
+
+				export readwipefile="$clear_policies_file"
+
+				# These are the categories we're going to wipe
+				rwi=0
+				declare -a readwipe
+				while read -r line; do
+					if [[ ${line:0:1} != '#' && $line ]]; then
+						readwipe[$rwi]="$line"
+						rwi=$((rwi+1))
+					fi
+				done < $readwipefile
+
+				wipejss
 			;;
 			q)
 				echo -e "\nThank you for using JSS API Instance Replicator!"
