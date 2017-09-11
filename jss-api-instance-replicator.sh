@@ -779,6 +779,16 @@ MainMenu()
 					fi
 				done < $readwipefile
 
+                # These are the categories we're going to upload. Ordering is different from read/wipe.
+				wbi=0
+				declare -a writebk
+				while read -r line; do
+					if [[ ${line:0:1} != '#' && $line ]]; then
+						writebk[$wbi]="$line"
+						wbi=$((wbi+1))
+					fi
+				done < $writebkfile
+
 				wipejss
 				puttonewjss
 			;;
