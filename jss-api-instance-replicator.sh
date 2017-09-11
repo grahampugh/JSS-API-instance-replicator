@@ -248,10 +248,10 @@ grabexistingjssxml()
 						if [[ $(cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep "<is_smart>false</is_smart>") ]]
 						then
 							echo "$resourceXML is a static computer group"
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/static_group_parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML  | grep -v '<id>'| sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/static_group_parsed_"$resourceXML"
 						else
 							echo "$resourceXML is a smart computer group..."
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/smart_group_parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v '<id>' | sed '/<computers>/,/<\/computers/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/smart_group_parsed_"$resourceXML"
 						fi
 					done
 				;;
@@ -268,7 +268,7 @@ grabexistingjssxml()
 							echo "Policy $resourceXML is not assigned to a category. Ignoring."
 						else
 							echo "Processing policy file $resourceXML"
-							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v '<self_service_icon>' | grep -v '<filename>' | grep -v '<uri>' | grep -v '</self_service_icon>' | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+							cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v '<id>' | sed '/<self_service_icon>/,/<\/self_service_icon>/d' | sed '/<computers>/,/<\/computers>/d'| sed '/<limit_to_users>/,/<\/limit_to_users>/d' | sed '/<users>/,/<\/users>/d' | sed '/<user_groups>/,/<\/user_groups>/d' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
 						fi
 					done
 				;;
@@ -279,7 +279,7 @@ grabexistingjssxml()
 					for resourceXML in $(ls $xmlloc/${readwipe[$loop]}/fetched_xml)
 					do
 						echo "Parsing $resourceXML"
-						cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
+						cat $xmlloc/${readwipe[$loop]}/fetched_xml/$resourceXML | grep -v '<id>' > $xmlloc/${readwipe[$loop]}/parsed_xml/parsed_"$resourceXML"
 					done
 				;;
 			esac
@@ -429,13 +429,12 @@ puttonewjss()
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $parsedXML_static | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
-						source_id="$( cat $parsedXML_static | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							echo "Static group $source_name already exists - not overwriting..."
 							# curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 
@@ -453,12 +452,11 @@ puttonewjss()
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $parsedXML_smart | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
-						source_id="$( cat $parsedXML_smart | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 				;;
@@ -487,13 +485,12 @@ puttonewjss()
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
-						source_id="$( cat $parsedXML | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							# existing policy not found, creating new one with the source_id
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
+							# existing policy not found, creating new one
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 
 							# Re-add icon from local source - first get the icon name from the policy name
 							policy_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
@@ -506,15 +503,15 @@ puttonewjss()
 	 							echo -e "\nIcon found: $icons_folder/$icon_name"
 								echo -e "Policy Name: $policy_name"
 
-								# # To upload the file we need to know the policy number that was just created.
-								# # To do this we submit a request based on the policy name
-								# policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
-								# policy_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
-								#
-								# echo -e "Policy number $policy_id identified..."
+								# To upload the file we need to know the policy number that was just created.
+								# To do this we submit a request based on the policy name
+								policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
+								policy_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
+
+								echo -e "Policy number $policy_id identified..."
 
 								# Now upload the file to the correct policy_id
-								curl -s -k -i -F name=@"$icons_folder/$icon_name" --user "$destjssapiuser:$destjssapipwd" "$destjssaddress$jssinstance/JSSResource/fileuploads/policies/id/$source_id"
+								curl -s -k -i -F name=@"$icons_folder/$icon_name" --user "$destjssapiuser:$destjssapipwd" "$destjssaddress$jssinstance/JSSResource/fileuploads/policies/id/$policy_id"
 								if [ "$?" == 0 ]; then
 									echo -e "\n$icon_name successfully uploaded"
 								else
@@ -540,12 +537,11 @@ puttonewjss()
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
-						source_id="$( cat $parsedXML | grep "<id>" | head -n 1 | sed 's/<[^>]*>//g' )"
 						existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 						if [[ $existing_id ]]; then
 							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$source_id
+							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 				;;
