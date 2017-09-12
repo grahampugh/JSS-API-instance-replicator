@@ -341,7 +341,7 @@ wipejss()
 				echo -e "\nDeleting ${readwipe[$loop]}"
 
 				# Process all the item id numbers
-				cat /tmp/unprocessedid | awk -F'<id>|</id>' '/<id>/ {print $2}' > /tmp/processedid
+				cat /tmp/unprocessedid | awk -F '<id>|</id>' '/<id>/ {print $2}' > /tmp/processedid
 
 				# Delete all the item id numbers
 				totalFetchedIDs=$( cat /tmp/processedid | wc -l | sed -e 's/^[ \t]*//' )
