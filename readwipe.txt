@@ -22,7 +22,7 @@ smtpserver
 # vppassignments
 # vppinvitations
 # webhooks
-diskencryptionconfigurations
+# diskencryptionconfigurations
 # ebooks
 computergroups
 # dockitems

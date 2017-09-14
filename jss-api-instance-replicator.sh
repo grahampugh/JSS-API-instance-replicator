@@ -40,7 +40,7 @@ export destjssaddress_default="https://myotherserver"
 export origjssapiuser_default="JSS_config_read"
 export destjssapiuser_default="JSS_config_write"
 export origjssinstance_default="source"
-export destjssinstance_default="dest01"
+export destjssinstance_default="destination"
 
 # API user template files.
 # These files can be created by copy-pasting code from the API resource after the first manual setup of an instance
@@ -52,15 +52,15 @@ export API_user_AutoPkg="$userXMLTemplatesDir/AutoPkg.xml"
 # This script relies on the following files, which contain a list of all the API parameters.
 # Each parameter can be commented in or out, depending on what you wish to copy.
 # Note that two files are necessary because the order has to be slightly different for reading and writing.
-export readwipefile="./readwipe.txt"
-export writebkfile="./writebk.txt"
+export readwipefile="readwipe.txt"
+export writebkfile="writebk.txt"
 # the clear_policies_file is used when wiping an instance only. It actually clears out policies and smart groups.
-export clear_policies_file="./clear_policies.txt"
+export clear_policies_file="clear_policies.txt"
 
 # icons folder
 # To get icons to import, you need to provide them in a folder. This script will attempt to match the policy name (minus version number)
 # to the name of the icon. If it's not there, it will skip the icon import.
-export icons_folder="/Volumes/Packaging/mac-resources/AutoPkg/icons/128x128"
+export icons_folder="/Volumes/Packaging/mac-resources/AutoPkg/icons_renamed"
 
 
 ### No need to edit below here
@@ -81,7 +81,7 @@ doesxmlfolderexist() {
 	read -p "(Or enter to use $HOME/Desktop/JSS_Config) : " xmlloc
 
 	# Check for the skip
-	if [[ $path = "" ]];
+	if [[ "$path" == "" ]];
 	then
 		export xmlloc="$xmlloc_default"
 	fi
@@ -89,7 +89,6 @@ doesxmlfolderexist() {
 	# Check and create the JSS xml folder and archive folders if missing.
 	if [ ! -d "$xmlloc" ];
 	then
-		mkdir -p "$xmlloc"
 		mkdir -p "$xmlloc"/archives
 	else
 		echo -e "\n"
@@ -105,9 +104,9 @@ doesxmlfolderexist() {
 	# Check for existing items, archiving if necessary.
 	for (( loop=0; loop<${#readwipe[@]}; loop++ ))
 	do
-		if [ "$archive" = "YES" ];
+		if [[ "$archive" == "YES" ]];
 		then
-			if [ $(ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l) -gt 0 ];
+			if [[ $(ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l) -gt 0 ]];
 			then
 				echo "Archiving category: "${readwipe[$loop]}
 				ditto -ck "$xmlloc"/"${readwipe[$loop]}" "$xmlloc"/archives/"${readwipe[$loop]}"-$( date +%Y%m%d%H%M%S ).zip
@@ -116,8 +115,9 @@ doesxmlfolderexist() {
 		fi
 
 	# Check and create the JSS xml resource folders if missing.
-		if [ ! -f "$xmlloc/${readwipe[$loop]}" ];
+		if [[ ! -f "$xmlloc/${readwipe[$loop]}" ]];
 		then
+			echo "Writing directories..."
 			mkdir -p "$xmlloc/${readwipe[$loop]}"
 			mkdir -p "$xmlloc/${readwipe[$loop]}/id_list"
 			mkdir -p "$xmlloc/${readwipe[$loop]}/fetched_xml"
