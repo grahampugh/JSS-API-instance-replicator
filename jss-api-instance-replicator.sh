@@ -45,6 +45,7 @@ export destjssinstance_default="destination"
 # API user template files.
 # These files can be created by copy-pasting code from the API resource after the first manual setup of an instance
 export userXMLTemplatesDir="User_XML_templates"
+export groupXMLTemplatesDir="Group_XML_templates"
 export API_user_JSS_config_read="$userXMLTemplatesDir/JSS_API_read.xml"
 export API_user_JSS_config_write="$userXMLTemplatesDir/JSS_API_write.xml"
 export API_user_AutoPkg="$userXMLTemplatesDir/AutoPkg.xml"
@@ -81,7 +82,7 @@ doesxmlfolderexist() {
 	read -p "(Or enter to use $HOME/Desktop/JSS_Config) : " xmlloc
 
 	# Check for the skip
-	if [[ "$path" == "" ]];
+	if [[ -z "$xmlloc" ]];
 	then
 		export xmlloc="$xmlloc_default"
 	fi
@@ -108,7 +109,7 @@ doesxmlfolderexist() {
 		then
 			if [[ $(ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l) -gt 0 ]];
 			then
-				echo "Archiving category: "${readwipe[$loop]}
+				echo -e "\nArchiving category: "${readwipe[$loop]}
 				ditto -ck "$xmlloc"/"${readwipe[$loop]}" "$xmlloc"/archives/"${readwipe[$loop]}"-$( date +%Y%m%d%H%M%S ).zip
 				rm -rf "$xmlloc/${readwipe[$loop]}"
 			fi
@@ -117,7 +118,6 @@ doesxmlfolderexist() {
 	# Check and create the JSS xml resource folders if missing.
 		if [[ ! -f "$xmlloc/${readwipe[$loop]}" ]];
 		then
-			echo "Writing directories..."
 			mkdir -p "$xmlloc/${readwipe[$loop]}"
 			mkdir -p "$xmlloc/${readwipe[$loop]}/id_list"
 			mkdir -p "$xmlloc/${readwipe[$loop]}/fetched_xml"
@@ -569,6 +569,20 @@ writeAPIuser() {
 		echo -e "Could not create $API_user for $jssinstance (perhaps it already exists?)."
 }
 
+writeAPIgroup() {
+	# This function creates the API groups. It requires the use of the "master" admin account to do this.
+	# Note that it cannot write passwords, so you need to login as the master admin after creating the account
+	# and go to Settings -> Users, and add the password(s) manually.
+
+	# Insert the users
+	clear
+	echo -e "Creating user $API_group for $jssinstance using template at $API_group_file..."
+
+	curl -s -k -i -H "Content-Type: application/xml" -d @"$API_group_file" --user "$jssapiuser:$jssapipwd" $jssaddress/$jssinstance/JSSResource/accounts/groupid/0 && \
+		echo -e "Created $API_group for $jssinstance." || \
+		echo -e "Could not create $API_group for $jssinstance (perhaps it already exists?)."
+}
+
 MainMenu()
 {
 	# Set IFS to only use new lines as field separator.
@@ -579,11 +593,12 @@ MainMenu()
 	do
 		echo -e "\nMain Menu"
 		echo -e "=========\n"
-		echo -e "1) Create initial JSS API users (without passwords)"
-		echo -e "2) Download config from source/template JSS"
-		echo -e "3) Upload config to destination JSS instance (no wipe)"
-		echo -e "4) Wipe destination JSS instance and upload config"
-		echo -e "5) Wipe JSS instance of policy/smart group data"
+		echo -e "1) Create JSS API user (without password)"
+		echo -e "2) Create JSS API group (without password)"
+		echo -e "3) Download config from source/template JSS"
+		echo -e "4) Upload config to destination JSS instance (no wipe)"
+		echo -e "5) Wipe destination JSS instance and upload config"
+		echo -e "6) Wipe JSS instance of policy/smart group data"
 
 		echo -e "q) Quit!\n"
 
@@ -631,6 +646,46 @@ MainMenu()
 				jssinstance=""
 			;;
 			2)
+				# Ask which instance we need to process, check if it exists and go from there
+				echo -e "\n"
+				read -p "Enter the JSS server address (or enter for $destjssaddress_default) : " jssaddress
+				echo "Enter the JSS instance name to which to create API group (or enter for '$destjssinstance_default')"
+				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+
+				# Read in defaults if not entered
+				if [[ -z $jssaddress ]]; then
+					jssaddress="$destjssaddress_default"
+				fi
+
+				# Check for the default or non-context
+				if [[ $jssinstance == "/" ]]; then
+					jssinstance=""
+				elif [[ -z $jssinstance ]]; then
+					jssinstance="$destjssinstance_default"
+				fi
+
+				read -p "Enter the $jssinstance JSS admin username (or enter for 'jamfadmin'): " jssapiuser
+				read -p "Enter the $jssinstance JSS admin user password : " -s jssapipwd
+
+				if [[ -z $jssapiuser ]]; then
+					jssapiuser="jamfadmin"
+				fi
+
+				echo "Enter the group name to create from the following list: "
+				find $groupXMLTemplatesDir/* -maxdepth 0 -type f 2>/dev/null | sed -e 's/.*\///' | sed -e 's/\..*//'
+				read -p "Enter one of the above : " API_group
+
+				# Account creations using the API
+				export API_group_file="$groupXMLTemplatesDir/$API_group.xml"
+				if [[ ! -f "$API_group_file" ]]; then
+					echo "$API_group_file does not exist!"
+					return 1
+				fi
+
+				writeAPIgroup
+				jssinstance=""
+			;;
+			3)
 				echo -e "\n"
 				read -p "Enter the JSS server address (or enter for $origjssaddress_default) : " jssaddress
 
@@ -677,7 +732,7 @@ MainMenu()
 
 				grabexistingjssxml
 			;;
-			3)
+			4)
 				jssaddress=""
 				jssapiuser=""
 				echo -e "\n"
@@ -717,19 +772,28 @@ MainMenu()
 				export destjssapiuser="$jssapiuser"
 				export destjssapipwd="$jssapipwd"
 
-				# These are the categories we're going to upload. Ordering is different from read/wipe.
+				# Do you want to change just a single parameter or the standard list?
+				apiParameter=""
+				echo
+				read -p "If you want to change a specific API parameter, enter it here : " apiParameter
+
 				wbi=0
 				declare -a writebk
-				while read -r line; do
-					if [[ ${line:0:1} != '#' && $line ]]; then
-						writebk[$wbi]="$line"
-						wbi=$((wbi+1))
-					fi
-				done < $writebkfile
+				if [[ -z "$apiParameter" ]]; then
+					# These are the categories we're going to upload. Ordering is different from read/wipe.
+					while read -r line; do
+						if [[ ${line:0:1} != '#' && $line ]]; then
+							writebk[$wbi]="$line"
+							wbi=$((wbi+1))
+						fi
+					done < $writebkfile
+				else
+					writebk[$wbi]="$apiParameter"
+				fi
 
 				puttonewjss
 			;;
-			4)
+			5)
 				jssaddress=""
 				jssapiuser=""
 				echo -e "\n"
@@ -792,7 +856,7 @@ MainMenu()
 				wipejss
 				puttonewjss
 			;;
-			5)
+			6)
 				jssaddress=""
 				jssapiuser=""
 				echo -e "\n"
@@ -882,6 +946,16 @@ echo -e "    ONLY if the icon name matches the policy name minus version number.
 echo -e "13. Policies with LDAP Users and Groups limitations will have these stripped before migration."
 
 # Call functions to make this work here
+# These are the categories we're going to wipe
+rwi=0
+declare -a readwipe
+while read -r line; do
+	if [[ ${line:0:1} != '#' && $line ]]; then
+		readwipe[$rwi]="$line"
+		rwi=$((rwi+1))
+	fi
+done < $readwipefile
+
 doesxmlfolderexist
 MainMenu
 
