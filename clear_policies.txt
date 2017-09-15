@@ -34,7 +34,7 @@ computergroups
 # osxconfigurationprofiles
 # macapplications
 # managedpreferenceprofiles
-# packages
+packages
 policies
 # advancedcomputersearches
 # patches
