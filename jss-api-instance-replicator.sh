@@ -30,7 +30,7 @@
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
 # Config file
-export servername="id-jps-tst-1"
+export servername="id-jps-prd-1"
 export config_override_file="jss-api-instance-replicator-config.$servername.sh"
 
 # Set up variables here
