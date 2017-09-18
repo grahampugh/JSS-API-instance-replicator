@@ -37,7 +37,7 @@ osxconfigurationprofiles
 packages
 policies
 # advancedcomputersearches
-patches
+# patches
 # mobiledeviceextensionattributes
 # mobiledeviceapplications
 # mobiledeviceconfigurationprofiles
