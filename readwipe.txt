@@ -30,13 +30,13 @@ computergroups
 # licensedsoftware
 scripts
 computerextensionattributes
-restrictedsoftware
+# restrictedsoftware
 osxconfigurationprofiles
 # macapplications
 # managedpreferenceprofiles
 packages
 policies
-advancedcomputersearches
+# advancedcomputersearches
 # patches
 # mobiledevicegroups
 # mobiledeviceapplications

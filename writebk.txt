@@ -30,7 +30,7 @@ computerextensionattributes
 # licensedsoftware
 scripts
 computergroups
-restrictedsoftware
+# restrictedsoftware
 osxconfigurationprofiles
 # macapplications
 # managedpreferenceprofiles

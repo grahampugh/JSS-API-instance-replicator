@@ -30,8 +30,9 @@
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
 # Config file
-export servername="id-jamf-tst"
-export config_override_file="jss-api-instance-replicator-config.$servername.sh"
+
+export servername="id-jamf-prd"
+
 # Set up variables here
 export domain=".ethz.ch"
 export port=""
@@ -76,17 +77,16 @@ export icons_folder="/path/to/icons_folder"
 # Reset the internal counter
 export resultInt=1
 
-# Read in the variables from the configFile if it exists.
-if [[ -f "$config_override_file" ]]; then
-	. "$config_override_file"
-fi
-
 
 # Start functions here
 doesxmlfolderexist() {
-	# Where shall we store all this lovely xml?
-	echo -e "\nPlease enter the path to store data"
-	read -p "(Or enter to use $HOME/Desktop/JSS_Config) : " xmlloc
+	# Check for the skip
+	if [[ -z "$xmlloc" ]];
+	then
+		# Where shall we store all this lovely xml?
+		echo -e "\nPlease enter the path to store data"
+		read -p "(Or enter to use $HOME/Desktop/JSS_Config) : " xmlloc
+	fi
 
 	# Check for the skip
 	if [[ -z "$xmlloc" ]];
@@ -99,13 +99,15 @@ doesxmlfolderexist() {
 	then
 		mkdir -p "$xmlloc"/archives
 	else
-		echo -e "\n"
-		read -p "Do you wish to archive existing xml files? (Y/N) : " archive
-		if [[ "$archive" = "y" ]] || [[ "$archive" = "Y" ]];
-		then
-			archive="YES"
-		else
-			archive="NO"
+		if [[ -z $archive ]]; then
+			echo -e "\n"
+			read -p "Do you wish to archive existing xml files? (Y/N) : " archive
+			if [[ "$archive" = "y" ]] || [[ "$archive" = "Y" ]];
+			then
+				archive="YES"
+			else
+				archive="NO"
+			fi
 		fi
 	fi
 
@@ -1015,24 +1017,20 @@ case "$1" in
 
 		echo -e "\n$1 $2 $3 $4 $5"
 
+		# Overwrite our default config file if specified.
+		if [[ "$3" ]]; then
+			export config_override_file="jss-api-instance-replicator-config.$3.sh"
+		fi
+
+		if [[ -f "$config_override_file" ]]; then
+			. "$config_override_file"
+		fi
+
 		export xmlloc="$xmlloc_default"
 		export origjssaddress="$origjssaddress_default"
 		export jssinstance="/$origjssinstance_default"
 		export origjssapiuser="$origjssapiuser_default"
 		export origjssapipwd="$origjssapipwd_default"
-
-		if [[ "$2" ]]; then
-			export jssinstance="/$2"
-		fi
-		if [[ "$3" ]]; then
-			export origjssaddress="$3"
-		fi
-		if [[ "$4" ]]; then
-			export origjssapiuser="$4"
-		fi
-		if [[ "$5" ]]; then
-			export origjssapipwd="$5"
-		fi
 
 		# These are the categories we're going to save
 		rwi=0
@@ -1044,7 +1042,27 @@ case "$1" in
 			fi
 		done < $readwipefile
 
+		# check XML folders non-interactively. Automatically archive to remove any old files
+		export archive="YES"
+		doesxmlfolderexist
+
+		if [[ "$2" ]]; then
+			export jssinstance="/$2"
+		fi
+		if [[ "$3" ]]; then
+			export origjssaddress="https://$3$domain"
+		fi
+		if [[ "$4" ]]; then
+			export origjssapiuser="$4"
+		fi
+		if [[ "$5" ]]; then
+			export origjssapipwd="$5"
+		fi
+
 		grabexistingjssxml
+
+		echo "Finished downloading from $origjssaddress$jssinstance"
+		echo
 		exit
 	;;
 
@@ -1052,12 +1070,35 @@ case "$1" in
 
 		echo -e "\n$1 $2 $3 $4 $5 $6"
 
+		# Overwrite our default config file if specified.
+		if [[ "$3" ]]; then
+			export config_override_file="jss-api-instance-replicator-config.$3.sh"
+		fi
+
+		if [[ -f "$config_override_file" ]]; then
+			. "$config_override_file"
+		fi
+
 		export xmlloc="$xmlloc_default"
 		export destjssaddress="$destjssaddress_default"
 		export jssinstance="/$destjssinstance_default"
 		export apiParameter=""
 		export destjssapiuser="$destjssapiuser_default"
 		export destjssapipwd="$destjssapipwd_default"
+
+		# These are the categories we're going to upload. Ordering is different from read/wipe.
+		wbi=0
+		declare -a writebk
+		if [[ -z "$apiParameter" ]]; then
+			while read -r line; do
+				if [[ ${line:0:1} != '#' && $line ]]; then
+					writebk[$wbi]="$line"
+					wbi=$((wbi+1))
+				fi
+			done < $writebkfile
+		else
+			writebk[$wbi]="$apiParameter"
+		fi
 
 		if [[ "$2" ]]; then
 			if [[ $2 == "ALL" ]]; then
@@ -1067,7 +1108,7 @@ case "$1" in
 			fi
 		fi
 		if [[ "$3" ]]; then
-			export destjssaddress="https://$3.$domain"
+			export destjssaddress="https://$3$domain"
 		fi
 		if [[ "$4" ]]; then
 			export apiParameter="$4"
@@ -1079,24 +1120,15 @@ case "$1" in
 			export destjssapiuser="$6"
 		fi
 
-		wbi=0
-		declare -a writebk
-		if [[ -z "$apiParameter" ]]; then
-			# These are the categories we're going to upload. Ordering is different from read/wipe.
-			while read -r line; do
-				if [[ ${line:0:1} != '#' && $line ]]; then
-					writebk[$wbi]="$line"
-					wbi=$((wbi+1))
-				fi
-			done < $writebkfile
-		else
-			writebk[$wbi]="$apiParameter"
-		fi
 
 		if [[ $jssinstance == "ALL" ]]; then
 			putonallnewjsses
+			echo "Finished uploading to all destination instances on $destjssaddress"
+			echo
 		else
 			puttonewjss
+			echo "Finished uploading to $destjssaddress$jssinstance"
+			echo
 		fi
 		exit
 	;;
@@ -1117,6 +1149,12 @@ case "$1" in
     ;;
 esac
 
+# Read in the variables from the configFile if it exists.
+export config_override_file="jss-api-instance-replicator-config.$servername.sh"
+
+if [[ -f "$config_override_file" ]]; then
+	. "$config_override_file"
+fi
 
 doesxmlfolderexist
 MainMenu
