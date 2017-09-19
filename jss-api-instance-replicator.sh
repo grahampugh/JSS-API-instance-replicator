@@ -28,6 +28,9 @@
 #				Obviously this is vulnerable, but in particular policies with packages just won't work otherwise.
 # Version 0.8	Script can now be run from the command line for full automation of downloads and uploads. Run with "--help" for details.
 # Version 0.9	Improved API name searches - now accounting for ampersands in parameter names (e.g. category names)
+# Version 0.9.1 Changed -d to --data-binary in curl commands to handle XML better.
+#				Now handles multi-line self_service_description as a result.
+
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
@@ -403,7 +406,7 @@ puttonewjss() {
 						let "postInt_user = $postInt_user + 1"
 						echo -e "\nPosting $xmlPost_user ( $postInt_user out of $totalParsedResourceXML_user )"
 
-						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlPost_user" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/userid/0
+						curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$xmlPost_user" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/userid/0
 
 					done
 
@@ -417,7 +420,7 @@ puttonewjss() {
 						let "postInt_group = $postInt_group + 1"
 						echo -e "\nPosting $xmlPost_group ( $postInt_group out of $totalParsedResourceXML_group )"
 
-						curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlPost_group" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/groupid/0
+						curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$xmlPost_group" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/accounts/groupid/0
 
 					done
 				;;
@@ -444,9 +447,9 @@ puttonewjss() {
 							existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 
 							echo "Static group $source_name already exists - not overwriting..."
-							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" --data-binary @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$parsedXML_static" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 
@@ -470,9 +473,9 @@ puttonewjss() {
 						if [[ $response_code != "404" ]]; then
 							existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 
-							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" --data-binary @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$parsedXML_smart" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 				;;
@@ -483,7 +486,7 @@ puttonewjss() {
 					do
 						echo -e "\nPosting ${writebk[$loop]} $parsedXML ( $postInt out of $totalParsedResourceXML )"
 
-						curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}
+						curl -s -k -i -X PUT -H "Content-Type: application/xml" --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}
 
 					done
 				;;
@@ -507,17 +510,25 @@ puttonewjss() {
 						if [[ $response_code != "404" ]]; then
 							existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 
-							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 
 						else
 							# existing policy not found, creating new one
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 
 							# Re-add icon from local source - first get the icon name from the policy name
 							policy_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | awk -F '<name>|</name>' '{ print $2; exit; }' )"
 							echo -e "Policy Name: $policy_name"
 
-							software_name=$( echo "$policy_name" | sed -e 's/ EN//; s/ DE//; s/ Node//; s/ Floating//;' | awk '{$NF=""; print $0}' | xargs )
+							# Find the version from the name (let's hope it's the last word in the string!)
+							versionNumber=$(echo ${policy_name##* } | grep -ow 'v.*' | sed -e 's/v//')
+							echo "Version number: $versionNumber"
+
+							if [[ $versionNumber ]]; then
+								software_name=$( echo "$policy_name" | sed -e 's/ EN//; s/ DE//; s/ Node//; s/ Floating//;' | awk '{$NF=""; print $0}' | xargs )
+							else
+								software_name=$( echo "$policy_name" | sed -e 's/ EN//; s/ DE//; s/ Node//; s/ Floating//;' | xargs )
+							fi
 							icon_name="$software_name.png"
 							echo -e "Icon name: $icon_name"
 
@@ -568,9 +579,9 @@ puttonewjss() {
 						if [[ $response_code != "404" ]]; then
 							existing_id=$( curl -s -k "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - | grep "<id>" | awk -F '<id>|</id>' '{ print $2; exit; }' )
 
-							curl -s -k -i -X PUT -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
+							curl -s -k -i -X PUT -H "Content-Type: application/xml" --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/$existing_id
 						else
-							curl -s -k -i -H "Content-Type: application/xml" -d @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
+							curl -s -k -i -H "Content-Type: application/xml" --data-binary @"$xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML" --user "$destjssapiuser:$destjssapipwd" $destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/id/0
 						fi
 					done
 				;;
