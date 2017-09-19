@@ -26,6 +26,8 @@
 # Version 0.7	Added wipe-only option.
 # 				Changed writebk to write to destination instance with same IDs as source, otherwise things break.
 #				Obviously this is vulnerable, but in particular policies with packages just won't work otherwise.
+# Version 0.8	Script can now be run from the command line for full automation of downloads and uploads. Run with "--help" for details.
+# Version 0.9	Improved API name searches - now accounting for ampersands in parameter names (e.g. category names)
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
@@ -118,7 +120,7 @@ doesxmlfolderexist() {
 		then
 			if [[ $(ls -1 "$xmlloc"/"${readwipe[$loop]}"/* 2>/dev/null | wc -l) -gt 0 ]];
 			then
-				echo -e "\nArchiving category: "${readwipe[$loop]}
+				echo -e "\nArchiving API parameter: "${readwipe[$loop]}
 				ditto -ck "$xmlloc"/"${readwipe[$loop]}" "$xmlloc"/archives/"${readwipe[$loop]}"-$( date +%Y%m%d%H%M%S ).zip
 				rm -rf "$xmlloc/${readwipe[$loop]}"
 			fi
@@ -135,8 +137,7 @@ doesxmlfolderexist() {
 	done
 }
 
-grabexistingjssxml()
-{
+grabexistingjssxml() {
 	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
@@ -158,7 +159,7 @@ grabexistingjssxml()
 		export fetchedResultAccountsUsers="$xmlloc/${readwipe[$loop]}/fetched_xml/userResult$resultInt.xml"
 		export fetchedResultAccountsGroups="$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult$resultInt.xml"
 
-		# Grab all existing ID's for the current category we're processing
+		# Grab all existing ID's for the current API parameter we're processing
 		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on \"$jssinstance\" JSS \n"
 		# echo -e "using $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} with user $origjssapiuser:$origjssapipwd"
 		curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd" | xmllint --format - > $formattedList
@@ -245,7 +246,7 @@ grabexistingjssxml()
 				;;
 			esac
 
-			# Depending which category we're dealing with, parse the grabbed files into something we can upload later.
+			# Depending which API parameter we're dealing with, parse the grabbed files into something we can upload later.
 			case "${readwipe[$loop]}" in
 				computergroups)
 					echo -e "\nParsing JSS computer groups"
@@ -301,8 +302,7 @@ grabexistingjssxml()
 	IFS=$OIFS
 }
 
-wipejss()
-{
+wipejss() {
 	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
@@ -327,16 +327,16 @@ wipejss()
 	do
 		if [ ${readwipe[$loop]} = "accounts" ];
 		then
-			echo -e "\nSkipping ${readwipe[$loop]} category. Or we can't get back in!"
+			echo -e "\nSkipping ${readwipe[$loop]} API parameter. Or we can't get back in!"
 
 		elif [[ ${readwipe[$loop]} = "smtpserver" || ${readwipe[$loop]} = "activationcode" ]]; then
-			echo -e "\nSkipping ${readwipe[$loop]} category as no delete option is available via API."
+			echo -e "\nSkipping ${readwipe[$loop]} API parameter as no delete option is available via API."
 
 		else
 			# Set our result incremental variable to 1
 			export resultInt=1
 
-			# Grab all existing ID's for the current category we're processing
+			# Grab all existing ID's for the current API parameter we're processing
 			echo -e "\n\nProcessing ID list for ${readwipe[$loop]}\n"
 
 			curl -s -k $destjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" | xmllint --format - > /tmp/unprocessedid
@@ -364,7 +364,7 @@ wipejss()
 					resultInt=$((resultInt + 1))
 				done
 			else
-				echo -e "\nCategory ${readwipe[$loop]} is empty. Skipping."
+				echo -e "\nAPI parameter ${readwipe[$loop]} is empty. Skipping."
 			fi
 		fi
 	done
@@ -374,8 +374,7 @@ wipejss()
 
 }
 
-puttonewjss()
-{
+puttonewjss() {
 	# Setting IFS Env to only use new lines as field seperator
 	OIFS=$IFS
 	IFS=$'\n'
@@ -437,7 +436,7 @@ puttonewjss()
 						# look for existing policy and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $parsedXML_static | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' | sed -e 's|&amp;|%26|g' )"
 
 						response_code=$( curl -s -o /dev/null -w "%{http_code}" -I -X GET "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" )
 
@@ -464,7 +463,7 @@ puttonewjss()
 						# look for existing entry and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $parsedXML_smart | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' | sed -e 's|&amp;|%26|g' )"
 
 						response_code=$( curl -s -o /dev/null -w "%{http_code}" -I -X GET "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" )
 
@@ -501,7 +500,7 @@ puttonewjss()
 						# look for existing policy and update it rather than create a new one if it exists
 						# Re-add icon from local source - first get the policy name from the parsed XML
 						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | awk -F '<name>|</name>' '{ print $2; exit; }' )"
-						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' | sed -e 's|&amp;|%26|g' )"
 
 						response_code=$( curl -s -o /dev/null -w "%{http_code}" -I -X GET "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" )
 
@@ -529,7 +528,7 @@ puttonewjss()
 
 								# To upload the file we need to know the policy number that was just created.
 								# To do this we submit a request based on the policy name
-								policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' )"
+								policy_name_urlencode="$( echo "$policy_name" | sed -e 's| |%20|g' | sed -e 's|&amp;|%26|g' )"
 
 								echo -e "\nURL: $destjssaddress$jssinstance/JSSResource/policies/name/$policy_name_urlencode"
 
@@ -562,7 +561,7 @@ puttonewjss()
 
 						# look for existing entry and update it rather than create a new one if it exists
 						source_name="$( cat $xmlloc/${writebk[$loop]}/parsed_xml/$parsedXML | grep "<name>" | head -n 1 | sed 's/<[^>]*>//g' )"
-						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' )"
+						source_name_urlencode="$( echo "$source_name" | sed -e 's| |%20|g' | sed -e 's|&amp;|%26|g' )"
 
 						response_code=$( curl -s -o /dev/null -w "%{http_code}" -I -X GET "$destjssaddress$jssinstance/JSSResource/${writebk[$loop]}/name/$source_name_urlencode" -H "Accept: application/xml" --user "$destjssapiuser:$destjssapipwd" )
 
@@ -622,8 +621,7 @@ writeAPIgroup() {
 		echo -e "Could not create $API_group for $jssinstance (perhaps it already exists?)."
 }
 
-MainMenu()
-{
+MainMenu() {
 	# Set IFS to only use new lines as field separator.
 	OIFS=$IFS
 	IFS=$'\n'
