@@ -30,17 +30,24 @@
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
 # The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
 # Config file
-export servername="id-jps-prd-1"
+export servername="id-jamf-tst"
 export config_override_file="jss-api-instance-replicator-config.$servername.sh"
-
 # Set up variables here
-export xmlloc_default="$HOME/Desktop/JSS_Config"
-export origjssaddress_default="https://myserver"
-export destjssaddress_default="https://myotherserver"
-export origjssapiuser_default="JSS_config_read"
-export destjssapiuser_default="JSS_config_write"
+export domain=".ethz.ch"
+export port=""
+if [[ $port ]]; then
+	domain="$domain:$port"
+fi
+export origjssaddress_default="https://$servername$domain"
 export origjssinstance_default="source"
+export origjssapiuser_default="JSS_config_read"
+
+export destjssaddress_default="https://myotherserver"
 export destjssinstance_default="destination"
+export destjssapiuser_default="JSS_config_write"
+export destjssinstance_array=( "enter" "all" "destination" "instances" "here" )
+
+export xmlloc_default="$HOME/Desktop/JSS_Config"
 
 # API user template files.
 # These files can be created by copy-pasting code from the API resource after the first manual setup of an instance
@@ -150,7 +157,7 @@ grabexistingjssxml()
 		export fetchedResultAccountsGroups="$xmlloc/${readwipe[$loop]}/fetched_xml/groupResult$resultInt.xml"
 
 		# Grab all existing ID's for the current category we're processing
-		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on template JSS \n"
+		echo -e "\n\nCreating ID list for ${readwipe[$loop]} on \"$jssinstance\" JSS \n"
 		# echo -e "using $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} with user $origjssapiuser:$origjssapipwd"
 		curl -s -k $origjssaddress$jssinstance/JSSResource/${readwipe[$loop]} -H "Accept: application/xml" --user "$origjssapiuser:$origjssapipwd" | xmllint --format - > $formattedList
 
@@ -372,7 +379,7 @@ puttonewjss()
 	IFS=$'\n'
 
 	clear
-	echo -e "Writing to $jssinstance"
+	echo -e "\nWriting to $jssinstance"
 
 	for (( loop=0; loop<${#writebk[@]}; loop++ ))
 	do
@@ -576,6 +583,15 @@ puttonewjss()
 	IFS=$OIFS
 }
 
+putonallnewjsses() {
+	# loop through all the instances
+	jssinstance=""
+	for (( instanceloop=0; instanceloop<${#destjssinstance_array[@]}; instanceloop++ )); do
+		jssinstance="/${destjssinstance_array[$instanceloop]}"
+		puttonewjss
+	done
+}
+
 writeAPIuser() {
 	# This function creates the API users. It requires the use of the "master" admin account to do this.
 	# Note that it cannot write passwords, so you need to login as the master admin after creating the account
@@ -609,6 +625,39 @@ MainMenu()
 	# Set IFS to only use new lines as field separator.
 	OIFS=$IFS
 	IFS=$'\n'
+
+	# Start menu screen here
+	clear
+	echo -e "\n---------------------------"
+	echo -e "\nJSS API Instance Replicator"
+	echo -e "\n---------------------------"
+	echo
+	echo -e "** Very Important Info **"
+	echo -e "\n1. Passwords WILL NOT be migrated with standard accounts. You must put these in again manually."
+	echo -e "2. Both macOS and iOS devices will NOT be migrated at all."
+	echo -e "3. Smart Computer Groups will only contain logic information."
+	echo -e "4. Static Computer groups will NOT be migrated at all."
+	echo -e "5. Distribution Point failover settings will NOT be included."
+	echo -e "6. Distribution Point passwords for Casper R/O and Casper R/W accounts will NOT be included."
+	echo -e "7. LDAP Authentication passwords will NOT be included."
+	echo -e "8. Directory Binding account passwords will NOT be included."
+	echo -e "9. Individual computers that are excluded from restricted software items WILL NOT be included in migration."
+	echo -e "10. Policies that are not assigned to a category will NOT be migrated."
+	echo -e "11. Policies that have Self Service icons and individual computers as a scope or exclusion will have these items missing."
+	echo -e "12. Self Service icons will be uploaded from a named folder, "
+	echo -e "    ONLY if the icon name matches the policy name minus version number."
+	echo -e "13. Policies with LDAP Users and Groups limitations will have these stripped before migration."
+
+	# Call functions to make this work here
+	# These are the categories we're going to wipe
+	rwi=0
+	declare -a readwipe
+	while read -r line; do
+		if [[ ${line:0:1} != '#' && $line ]]; then
+			readwipe[$rwi]="$line"
+			rwi=$((rwi+1))
+		fi
+	done < $readwipefile
 
 	while [[ $choice != "q" ]]
 	do
@@ -769,7 +818,8 @@ MainMenu()
 				# Ask which instance we need to process, check if it exists and go from there
 				echo -e "\n"
 				echo "Enter the JSS instance name to which to upload API data (or enter for '$destjssinstance_default')"
-				read -p "(Enter '/' for a non-context JSS) : " jssinstance
+				echo "Or enter 'ALL' to propagate to all destination instances."
+				read -p "(or enter '/' for a non-context JSS) : " jssinstance
 
 				# Check for the default or non-context
 				if [[ -z "$jssaddress" ]]; then
@@ -777,14 +827,16 @@ MainMenu()
 				fi
 				if [[ $jssinstance == "/" ]]; then
 					jssinstance=""
+				elif [[ $jssinstance == "ALL" ]]; then
+					jssinstance="ALL"
 				elif [[ -z $jssinstance ]]; then
 					jssinstance="/$destjssinstance_default"
 				else
 					jssinstance="/$jssinstance"
 				fi
 
-				read -p "Enter the $jssinstance API username (or enter for $destjssapiuser_default) : " jssapiuser
-				read -p "Enter the $jssinstance API user password : " -s jssapipwd
+				read -p "Enter the API username (or enter for $destjssapiuser_default) : " jssapiuser
+				read -p "Enter the API user password : " -s jssapipwd
 
 				if [[ -z "$jssapiuser" ]]; then
 					jssapiuser="$destjssapiuser_default"
@@ -796,7 +848,7 @@ MainMenu()
 				# Do you want to change just a single parameter or the standard list?
 				apiParameter=""
 				echo
-				read -p "If you want to change a specific API parameter, enter it here : " apiParameter
+				read -p "If you only want to change a specific API parameter, enter it here : " apiParameter
 
 				wbi=0
 				declare -a writebk
@@ -812,7 +864,19 @@ MainMenu()
 					writebk[$wbi]="$apiParameter"
 				fi
 
-				puttonewjss
+				if [[ $jssinstance == "ALL" ]]; then
+					read -p "WARNING! This will write to ALL destination instances! Are you sure? (Y/N) : " areyousure
+					case "$areyousure" in
+						Y|y)
+							jssinstance="ALL"
+							putonallnewjsses
+						;;
+					esac
+					return
+				else
+					puttonewjss
+				fi
+
 			;;
 			5)
 				jssaddress=""
@@ -944,38 +1008,115 @@ MainMenu()
 	IFS=$OIFS
 }
 
-# Start menu screen here
-clear
-echo -e "\n---------------------------"
-echo -e "\nJSS API Instance Replicator"
-echo -e "\n---------------------------"
-echo
-echo -e "** Very Important Info **"
-echo -e "\n1. Passwords WILL NOT be migrated with standard accounts. You must put these in again manually."
-echo -e "2. Both macOS and iOS devices will NOT be migrated at all."
-echo -e "3. Smart Computer Groups will only contain logic information."
-echo -e "4. Static Computer groups will NOT be migrated at all."
-echo -e "5. Distribution Point failover settings will NOT be included."
-echo -e "6. Distribution Point passwords for Casper R/O and Casper R/W accounts will NOT be included."
-echo -e "7. LDAP Authentication passwords will NOT be included."
-echo -e "8. Directory Binding account passwords will NOT be included."
-echo -e "9. Individual computers that are excluded from restricted software items WILL NOT be included in migration."
-echo -e "10. Policies that are not assigned to a category will NOT be migrated."
-echo -e "11. Policies that have Self Service icons and individual computers as a scope or exclusion will have these items missing."
-echo -e "12. Self Service icons will be uploaded from a named folder, "
-echo -e "    ONLY if the icon name matches the policy name minus version number."
-echo -e "13. Policies with LDAP Users and Groups limitations will have these stripped before migration."
+# Parameter checking code here.
 
-# Call functions to make this work here
-# These are the categories we're going to wipe
-rwi=0
-declare -a readwipe
-while read -r line; do
-	if [[ ${line:0:1} != '#' && $line ]]; then
-		readwipe[$rwi]="$line"
-		rwi=$((rwi+1))
-	fi
-done < $readwipefile
+case "$1" in
+	-d|--download)
+
+		echo -e "\n$1 $2 $3 $4 $5"
+
+		export xmlloc="$xmlloc_default"
+		export origjssaddress="$origjssaddress_default"
+		export jssinstance="/$origjssinstance_default"
+		export origjssapiuser="$origjssapiuser_default"
+		export origjssapipwd="$origjssapipwd_default"
+
+		if [[ "$2" ]]; then
+			export jssinstance="/$2"
+		fi
+		if [[ "$3" ]]; then
+			export origjssaddress="$3"
+		fi
+		if [[ "$4" ]]; then
+			export origjssapiuser="$4"
+		fi
+		if [[ "$5" ]]; then
+			export origjssapipwd="$5"
+		fi
+
+		# These are the categories we're going to save
+		rwi=0
+		declare -a readwipe
+		while read -r line; do
+			if [[ ${line:0:1} != '#' && $line ]]; then
+				readwipe[$rwi]="$line"
+				rwi=$((rwi+1))
+			fi
+		done < $readwipefile
+
+		grabexistingjssxml
+		exit
+	;;
+
+	-u|--upload)
+
+		echo -e "\n$1 $2 $3 $4 $5 $6"
+
+		export xmlloc="$xmlloc_default"
+		export destjssaddress="$destjssaddress_default"
+		export jssinstance="/$destjssinstance_default"
+		export apiParameter=""
+		export destjssapiuser="$destjssapiuser_default"
+		export destjssapipwd="$destjssapipwd_default"
+
+		if [[ "$2" ]]; then
+			if [[ $2 == "ALL" ]]; then
+				export jssinstance="ALL"
+			else
+				export jssinstance="/$2"
+			fi
+		fi
+		if [[ "$3" ]]; then
+			export destjssaddress="https://$3.$domain"
+		fi
+		if [[ "$4" ]]; then
+			export apiParameter="$4"
+		fi
+		if [[ "$5" ]]; then
+			export destjssapiuser="$5"
+		fi
+		if [[ "$6" ]]; then
+			export destjssapiuser="$6"
+		fi
+
+		wbi=0
+		declare -a writebk
+		if [[ -z "$apiParameter" ]]; then
+			# These are the categories we're going to upload. Ordering is different from read/wipe.
+			while read -r line; do
+				if [[ ${line:0:1} != '#' && $line ]]; then
+					writebk[$wbi]="$line"
+					wbi=$((wbi+1))
+				fi
+			done < $writebkfile
+		else
+			writebk[$wbi]="$apiParameter"
+		fi
+
+		if [[ $jssinstance == "ALL" ]]; then
+			putonallnewjsses
+		else
+			puttonewjss
+		fi
+		exit
+	;;
+
+	-h|--help)
+        echo -e "\n------------"
+        echo -e "\nJSS API Instance Replicator"
+        echo -e "\nUsage: ./jss-api-instance-replicator.sh <option>"
+        echo -e "Run without specifying options for interactive mode."
+        echo -e "\nAvailable options:"
+        echo -e "-h, --help                                                           Shows this help screen"
+		echo -e "-d, --download <INSTANCE> <SERVER> <USER> <PASSWORD>                 Download XML to default location from <INSTANCE>."
+		echo -e "                                                                     Server is just the short name, e.g. id-jamf-tst"
+		echo -e "-u, --upload <INSTANCE> <SERVER> <API-PARAMETER> <USER> <PASSWORD>   Upload XML from default location to <INSTANCE>."
+		echo -e "                                                                     Instance can be ALL"
+
+        exit 0
+    ;;
+esac
+
 
 doesxmlfolderexist
 MainMenu
