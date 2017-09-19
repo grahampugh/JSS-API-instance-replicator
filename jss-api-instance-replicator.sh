@@ -30,6 +30,7 @@
 # Version 0.9	Improved API name searches - now accounting for ampersands in parameter names (e.g. category names)
 # Version 0.9.1 Changed -d to --data-binary in curl commands to handle XML better.
 #				Now handles multi-line self_service_description as a result.
+#				Also handles images where there is no version number in the Policy Name.
 
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
