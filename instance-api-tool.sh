@@ -1,19 +1,20 @@
 #!/bin/bash
 
-# Script to either save JSS config via api to XML or upload that XML to a new JSS
+# INSATNCE API TOOL
+# A script to either save JSS config via api to XML and/or upload parsesd XML to a JSS.
 #
-# Original Author : richard@richard-purves.com
+# Original Author of JSS-Config-In-A-Box:
+# https://github.com/franton/JSS-Config-In-A-Box
 #
-# Loosely based on the work by Jeffrey Compton at
+# JSS-Config-In-A-Box was loosely based on the work by Jeffrey Compton:
 # https://github.com/igeekjsc/JSSAPIScripts/blob/master/jssMigrationUtility.bash
 #
-# Adapted by Graham Pugh
+# Adapted for new purposes by Graham Pugh @ ETH Zurich.
 
 # Version 0.1 - readwipe and writebk lists separated into files for clarity.
 #               Parameters can now be commented out.
 #				Option to provide config in a private separate file added.
 #				Various changes to curl commands made as they didn't seem to work for me (maybe RedHat-related).
-#				Changed name from JSS-Config-In-A-Box to JSS-API-Instance-Replicator to clarify that this only does API stuff.
 # Version 0.2 - Corrected URL error in account grabbing curl statement.
 # Version 0.3 - Added creation of new API users, fixed smtpserver & activationcode get/push.
 # Version 0.4 - Added icon grab to import into policy. This requires access to a folder containing all the icons.
@@ -31,10 +32,11 @@
 # Version 0.9.1 Changed -d to --data-binary in curl commands to handle XML better.
 #				Now handles multi-line self_service_description as a result.
 #				Also handles images where there is no version number in the Policy Name.
+# Version 0.9.2	Changed name to Instance API Tool
 
 
 # If you wish to store your confidential config in a separate file, specify it here to overwrite the above values.
-# The name jss-api-instance-replicator-config.sh is by default excluded in .gitignore so that your private data isn't made public:
+# The name instance-api-tool-config-$servername.sh is by default excluded in .gitignore so that your private data isn't made public:
 # Config file
 
 export servername="id-jamf-prd"
@@ -640,9 +642,9 @@ MainMenu() {
 
 	# Start menu screen here
 	clear
-	echo -e "\n---------------------------"
-	echo -e "\nJSS API Instance Replicator"
-	echo -e "\n---------------------------"
+	echo -e "\n----------------------------------"
+	echo -e "\n  Instance API Tool for Jamf Pro"
+	echo -e "\n----------------------------------"
 	echo
 	echo -e "** Very Important Info **"
 	echo -e "\n1. Passwords WILL NOT be migrated with standard accounts. You must put these in again manually."
@@ -655,10 +657,18 @@ MainMenu() {
 	echo -e "8. Directory Binding account passwords will NOT be included."
 	echo -e "9. Individual computers that are excluded from restricted software items WILL NOT be included in migration."
 	echo -e "10. Policies that are not assigned to a category will NOT be migrated."
-	echo -e "11. Policies that have Self Service icons and individual computers as a scope or exclusion will have these items missing."
+	echo -e "11. Policies that have individual computers as a scope or exclusion will have these items missing."
 	echo -e "12. Self Service icons will be uploaded from a named folder, "
 	echo -e "    ONLY if the icon name matches the policy name minus version number."
+	echo -e "    Note that this can result in many duplicates of uploaded icons. Ways to mitigate this are welcomely received!"
 	echo -e "13. Policies with LDAP Users and Groups limitations will have these stripped before migration."
+
+	# Get the correct config from the config_override_file
+	export config_override_file="instance-api-tool-config.$servername.sh"
+
+	if [[ -f "$config_override_file" ]]; then
+		. "$config_override_file"
+	fi
 
 	# Call functions to make this work here
 	# These are the categories we're going to wipe
@@ -684,7 +694,7 @@ MainMenu() {
 
 		echo -e "q) Quit!\n"
 
-		read -p "Choose an option (1-3 / q) : " choice
+		read -p "Choose an option (1-6 / q) : " choice
 
 		case "$choice" in
 			1)
@@ -1008,7 +1018,7 @@ MainMenu() {
 				wipejss
 			;;
 			q)
-				echo -e "\nThank you for using JSS API Instance Replicator!"
+				echo -e "\nThank you for using instance-api-tool!"
 			;;
 			*)
 				echo -e "\nIncorrect input. Please try again."
@@ -1025,11 +1035,13 @@ MainMenu() {
 case "$1" in
 	-d|--download)
 
-		echo -e "\n$1 $2 $3 $4 $5"
+		echo -e "Command-line flags: \n$1 $2 $3 $4 $5"
 
 		# Overwrite our default config file if specified.
 		if [[ "$3" ]]; then
-			export config_override_file="jss-api-instance-replicator-config.$3.sh"
+			export config_override_file="instance-api-tool-config.$3.sh"
+		else
+			export config_override_file="instance-api-tool-config.$servername.sh"
 		fi
 
 		if [[ -f "$config_override_file" ]]; then
@@ -1078,11 +1090,13 @@ case "$1" in
 
 	-u|--upload)
 
-		echo -e "\n$1 $2 $3 $4 $5 $6"
+	echo -e "Command-line flags: \n$1 $2 $3 $4 $5 $6"
 
 		# Overwrite our default config file if specified.
 		if [[ "$3" ]]; then
-			export config_override_file="jss-api-instance-replicator-config.$3.sh"
+			export config_override_file="instance-api-tool-config.$3.sh"
+		else
+			export config_override_file="instance-api-tool-config.$servername.sh"
 		fi
 
 		if [[ -f "$config_override_file" ]]; then
@@ -1095,20 +1109,6 @@ case "$1" in
 		export apiParameter=""
 		export destjssapiuser="$destjssapiuser_default"
 		export destjssapipwd="$destjssapipwd_default"
-
-		# These are the categories we're going to upload. Ordering is different from read/wipe.
-		wbi=0
-		declare -a writebk
-		if [[ -z "$apiParameter" ]]; then
-			while read -r line; do
-				if [[ ${line:0:1} != '#' && $line ]]; then
-					writebk[$wbi]="$line"
-					wbi=$((wbi+1))
-				fi
-			done < $writebkfile
-		else
-			writebk[$wbi]="$apiParameter"
-		fi
 
 		if [[ "$2" ]]; then
 			if [[ $2 == "ALL" ]]; then
@@ -1130,6 +1130,20 @@ case "$1" in
 			export destjssapiuser="$6"
 		fi
 
+		# These are the categories we're going to upload. Ordering is different from read/wipe.
+		wbi=0
+		declare -a writebk
+		if [[ -z "$apiParameter" ]]; then
+			while read -r line; do
+				if [[ ${line:0:1} != '#' && $line ]]; then
+					writebk[$wbi]="$line"
+					wbi=$((wbi+1))
+				fi
+			done < $writebkfile
+		else
+			writebk[$wbi]="$apiParameter"
+		fi
+
 
 		if [[ $jssinstance == "ALL" ]]; then
 			putonallnewjsses
@@ -1144,9 +1158,10 @@ case "$1" in
 	;;
 
 	-h|--help)
-        echo -e "\n------------"
-        echo -e "\nJSS API Instance Replicator"
-        echo -e "\nUsage: ./jss-api-instance-replicator.sh <option>"
+		echo -e "\n----------------------------------"
+		echo -e "\n  Instance API Tool for Jamf Pro"
+		echo -e "\n----------------------------------"
+        echo -e "\nUsage: ./instance-api-tool.sh <option>"
         echo -e "Run without specifying options for interactive mode."
         echo -e "\nAvailable options:"
         echo -e "-h, --help                                                           Shows this help screen"
@@ -1160,7 +1175,7 @@ case "$1" in
 esac
 
 # Read in the variables from the configFile if it exists.
-export config_override_file="jss-api-instance-replicator-config.$servername.sh"
+export config_override_file="instance-api-tool-config.$servername.sh"
 
 if [[ -f "$config_override_file" ]]; then
 	. "$config_override_file"

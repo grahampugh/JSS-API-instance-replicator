@@ -2,7 +2,7 @@
 ## COMMENT OUT LINES THAT YOU DO NOT WISH TO SYNC TO DESTINATION INSTANCES
 # sites
 categories
-# ldapservers
+ldapservers
 # accounts
 # buildings
 # departments
@@ -17,7 +17,7 @@ categories
 # infrastructuremanager
 # peripherals
 # peripheraltypes
-# smtpserver
+smtpserver
 # vppaccounts
 # vppassignments
 # vppinvitations
